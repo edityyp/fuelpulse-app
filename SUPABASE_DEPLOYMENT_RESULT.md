@@ -25,7 +25,7 @@ The connected database reported PostgreSQL 17.6, database postgres, port 5432, s
 
 This corroborates the new project at database-host level rather than from a display name. Direct project-ref/name/API-URL settings remain unavailable through MCP. No database connection was made to the old project's hostname; its comparison was a public DNS lookup only. **Old project riywnbifqpsylsdocoyi was not modified or queried as a database.**
 
-## 3. Exact stop conditions
+## 3. Exact stop conditions (session 1)
 - The only Supabase connection uses `supabase_read_only_user`.
 - Both transaction_read_only and default_transaction_read_only are on.
 - That inspection role has no CREATEROLE permission.
@@ -96,3 +96,43 @@ Authorization is already recorded. What is missing is a secure target-specific m
 After that setup, repeat identity/conflict checks immediately before the first write, execute the unchanged migration through the hardened runner, and complete the requested hosted catalog/privilege/checksum verification. Do not treat this blocked report as evidence of deployment.
 
 **FINAL STATUS: DEPLOYMENT BLOCKED. No Supabase writes were made.**
+
+---
+
+## 10. Session 2 status (2026-09-08, 17:41 Asia/Kolkata)
+
+**Connection credentials were provided in this session (in chat). Credential rotation is urgently required — see DEPLOYMENT_RUNBOOK.md.**
+
+### Pre-flight checks completed by Notion AI (via GitHub MCP)
+
+| Check | Result |
+|-------|--------|
+| JWT `ref` claim decoded | `pbjftnlixuysmeotpsjc` ✓ |
+| JWT `role` claim | `service_role` ✓ |
+| Migration file Git blob (GitHub MCP) | `24898a751e2979c9147d11ef84c52106e2da0746` ✓ |
+| Migration file SHA-256 (local ZIP) | `92da7987e5559af29b2fb3d903dec722d74541f163d906aaa969f2f00c582c44` ✓ |
+| Repository HEAD | `5d407c80` (docs-only commit) ✓ |
+| Old project accessed | No ✓ |
+
+### Session 2 stop condition: Notion AI sandbox has zero outbound network connectivity
+
+- `curl https://pbjftnlixuysmeotpsjc.supabase.co/rest/v1/` → HTTP 000 (connection failed)
+- GitHub DNS resolution → failed (no internet)
+- npm registry → failed (no internet)
+- TCP port 5432 to Supabase → unreachable
+- `pg` npm module in ZIP's `node_modules` → empty directory (0 files)
+- `psql`, `psycopg2` → not installed in sandbox
+
+The Notion AI sandbox is a fully isolated environment with no outbound network access. It cannot connect to Supabase by any means. The migration must be run from the user's local machine or a CI environment with internet access.
+
+### What to do next
+
+1. **Rotate** the DB password and service role key (credentials were exposed in chat)
+2. **Clone** the repository locally: `git clone https://github.com/edityyp/fuelpulse-app.git`
+3. **Follow** `DEPLOYMENT_RUNBOOK.md` step by step from Phase 1
+4. **Run** the hardened migration runner with the new rotated credentials
+5. **Report** the output back so the Notion AI can continue with verification and documentation
+
+No Supabase writes were made in this session. The database remains clean.
+
+**FINAL STATUS: DEPLOYMENT BLOCKED (sandbox has no network). Migration ready to run locally per DEPLOYMENT_RUNBOOK.md.**
