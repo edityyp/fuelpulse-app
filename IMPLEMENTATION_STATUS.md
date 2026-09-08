@@ -1,30 +1,22 @@
-# FuelPulse reconstruction — final local status
+# FuelPulse — migration-runner deployment candidate
 
-CURRENT PHASE: 16 — local reconstruction verification and handoff
-COMPLETED PHASES: source persistence; foundation; local migration/RLS; authentication/RBAC; operational APIs; role-based UI; transaction/fraud/points/coupons; OCR/QR/voice implementation; offline/PWA; internal hardening; automated local QA; deployment/operations documentation
-IN PROGRESS: no background build work is implied; production release remains gated below
-BLOCKED: Supabase project access unavailable; GitHub workflow creation denied (403)
-NOT VERIFIED: production deployment/TLS/proxy; Docker image execution; real Android/Windows installation; physical QR camera/microphone; real-world OCR accuracy; independent penetration/load/restore/key-rotation drills; every visual interaction state
-LAST VERIFIED GIT COMMIT: 8ba6a0daa5eb0da56181e954de54f6dd8bdefb9f — final tested application code, read back remotely. This documentation checkpoint follows it; its final SHA is reported in the handoff.
+CURRENT PHASE: repository-side migration-history hardening complete; Supabase deployment stopped at approval boundary.
+BASE GIT COMMIT: 15f6e0e0bf90c9e5cd9d4c21d555200ef49e7132 (main, checked before changes).
+COMPLETED: private owner-only metadata/RLS; API/runtime denial; SHA-256 and ordered history validation; fail-closed legacy/unsafe objects/files; advisory serialization/atomic rollback; local migration/security regression suite; documentation; diff/secret review.
+BLOCKED: explicit Supabase-write approval; hosted dashboard identity/exposed-schema verification; hosted staging/role/TLS/pooler/backup/provisioning checks. Previous workflow-write permission limitation unchanged.
 
-## Fresh results, 2026-09-08
-- PostgreSQL 17.10 baseline migrated successfully on isolated local database, including after restoring the exported source checkpoint.
-- 31 tests passed; 0 failed/skipped. Runtime used restricted fuelpulse_local LOGIN membership in fuelpulse_gateway, not migration superuser.
-- TypeScript, ESLint, frontend build, compiled Node backend build: PASS.
-- Browser: all three roles/screens, synthetic browser OCR, offline shell refresh, pending queue across refresh, reconnect to exactly one record, no API cache, no uncaught errors: PASS on final build.
-- Production dependency audit: zero known vulnerabilities in this run.
-- Local tracked-source review: 47 files, zero private-key/GitHub-token pattern hits; .env/credentials excluded. Pattern scanning is not proof that all possible secrets/vulnerabilities are absent.
-- Actual source archive exported and successfully restored after a sandbox restart. Historical lost-build results are not counted.
+## Fresh validation, 2026-09-08
+- Node 24.14.1 / PostgreSQL 17.10, isolated loopback cluster only.
+- 62 automated tests passed, 0 failed/skipped: 31 existing plus 31 new migration cases.
+- TypeScript, ESLint, React production build, compiled Node backend and PWA/OCR assets: PASS.
+- Unchanged application baseline applied once; second run skipped the same checksummed migration.
+- Catalogs: 14 app tables with FORCE RLS, 26 policies; restricted runtime denied metadata access.
+- No application schema, server, shared contracts or frontend business-code changes.
+- Baseline Git blob remains 24898a751e2979c9147d11ef84c52106e2da0746.
 
-## Fixed in this run
-Transaction SQL business-date alias syntax; atomic self-password update/session revocation/audit; synchronous voice-start failure handling. Tests rerun after fixes. Original .gitignore checkpoint 619d155 and subsequent GitHub history preserved.
+## Remote safety and remaining scope
+Target pbjftnlixuysmeotpsjc; prior read-only host/DNS match corroborated identity and catalogs showed application-empty state. Project display name not exposed by MCP. No Supabase connection was used for write tests; no remote migrations, roles, grants, seed data, RLS/settings/auth/storage changes or deployment occurred.
 
-## Boundaries and remaining work
-- Supabase riywnbifqpsylsdocoyi / ixzbspygpwezetndczvm: no connection, no inspection, no modifications. Read-only inventory, staging rehearsal and explicit production approval required.
-- GitHub CI workflow write denied. No workflow run is claimed. Generated package-lock.json is included in source ZIP but not yet copied into GitHub; direct dependency versions are in package.json.
-- UI implements creation/activation/credentials for staff. Name/code updates exist through API but dedicated name/code editing UI is not provided.
-- Queue failures remain visible/retryable; no correction/discard UI. Device queue is not global pending telemetry. Closed-app background sync/cold offline login are not promised.
-- Points spending, coupon monetary discounts, configurable RBAC policy builder, notification delivery and automatic key rotation are not implemented. Coupons are plate-bound single-use entitlements.
-- Dashboard, employee mobile, staff and coupon layouts visually inspected; other screens structurally rendered/checked but exhaustive visual/manual interactions remain a release checklist.
+Browser/device checks were not rerun for this tracker change; earlier reconstruction evidence is historical. Production/TLS/proxy/pooler, Docker, physical QR/microphone/install flows, real-world OCR, load/independent penetration/backup restoration and exhaustive visual states remain release gates. Feature limitations in the reconstruction report are unchanged.
 
-Authoritative source: https://github.com/edityyp/fuelpulse-app . GitHub writes used the secure integration. Local snapshot commits differ from remote commit IDs; no native authenticated git push is claimed.
+Private .env files and generated credentials are excluded. No new dependencies; the existing source-archive lockfile was used for local npm ci but is not a newly committed GitHub change. GitHub push/commit outcome is reported separately after remote read-back; local snapshot hashes are not remote history. No background work or production readiness certification is implied.

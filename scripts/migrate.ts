@@ -1,2 +1,16 @@
-import pg from 'pg';import {readdir,readFile} from 'node:fs/promises';
-if(!process.env.MIGRATION_DATABASE_URL)throw Error('MIGRATION_DATABASE_URL required; inspect target before applying');const c=new pg.Client({connectionString:process.env.MIGRATION_DATABASE_URL});await c.connect();try{await c.query('BEGIN');await c.query("select pg_advisory_xact_lock(hashtextextended('fuelpulse.migrate',0))");await c.query('create table if not exists public.fuelpulse_migrations(name text primary key,applied_at timestamptz default now())');for(const n of(await readdir('supabase/migrations')).sort()){if(!(await c.query('select 1 from public.fuelpulse_migrations where name=$1',[n])).rowCount){await c.query(await readFile('supabase/migrations/'+n,'utf8'));await c.query('insert into public.fuelpulse_migrations(name) values($1)',[n]);console.log('Applied',n);}}await c.query('COMMIT');}catch(e){await c.query('ROLLBACK');throw e;}finally{await c.end();}
+import { runMigrations, MigrationSafetyError } from './migration-runner.js';
+
+const connectionString = process.env.MIGRATION_DATABASE_URL;
+if (!connectionString) throw new Error('MIGRATION_DATABASE_URL required; inspect target before applying');
+try {
+  const result = await runMigrations({
+    connectionString,
+    directory: 'supabase/migrations',
+    privateMetadataConfirmed: process.env.FUELPULSE_PRIVATE_METADATA_CONFIRMED === 'true',
+  });
+  console.log(`Migration transaction committed: ${result.applied.length} applied, ${result.skipped} already recorded.`);
+} catch (error) {
+  // Never serialize pg connection configuration, URLs or SQL/secret-bearing error objects.
+  console.error(error instanceof MigrationSafetyError ? error.message : 'Migration failed; transaction rolled back unless commit outcome is uncertain. Inspect history before retrying.');
+  process.exitCode = 1;
+}

@@ -1,67 +1,50 @@
 # FuelPulse
 
-Locally tested fuel-station management PWA reconstructed from scratch. Actual source is permanently committed here. **Not production deployed or certified.** See IMPLEMENTATION_STATUS.md and docs/final-report.md for current boundaries.
+Fuel-station management PWA: React 19/TypeScript/Vite -> same-origin Fastify 5/Node 24 -> PostgreSQL 17. Custom staff-code authentication; no browser database credentials. **Locally verified deployment candidate; NOT deployed to production.**
 
 ## Current verification
-2026-09-08: **31 automated tests passed**, zero failed; PostgreSQL 17 migration, TypeScript, ESLint, frontend/backend builds passed. Chromium verified three roles, synthetic plate through real browser OCR, offline refresh/queue persistence, reconnect to one confirmed record, no API service-worker caching, and no uncaught errors. Historical lost-build results are NOT used.
+2026-09-08 repository hardening: **62 tests passed, zero failed/skipped** (31 existing application/security tests + 31 migration cases). TypeScript, ESLint, production frontend/backend/PWA asset builds passed. Full baseline applied locally and repeated without duplicate execution. Earlier browser OCR/offline/role checks remain historical evidence; not rerun for this tracker-only change.
 
-## Architecture and source
-React 19 + TypeScript + Vite 8 PWA → same-origin Fastify 5 / Node 24 → PostgreSQL 17 (Supabase-hosted PostgreSQL is a deployment option). Custom staff-code authentication, no browser DB credentials.
+See SUPABASE_DEPLOYMENT_PLAN.md, IMPLEMENTATION_STATUS.md and docs/testing.md for evidence and limitations. docs/final-report.md describes the earlier reconstruction checkpoint, not this new hardening run.
 
-src/: app/admin/transaction screens, API, OCR/QR/voice, IndexedDB sync.
-server/: authentication, crypto, RLS transaction wrapper, business engine and operational APIs.
-shared/: strict Zod contracts.
-supabase/migrations/: additive schema with FORCE RLS.
-scripts/: migration, owner bootstrap, PWA/OCR assets and local/browser QA.
-tests/: security, concurrency, password and assistance regressions.
-docs/: architecture, database, API, security, testing, deployment, operations and final report.
+## Source and business rules
+src/ contains app/admin/transaction UI, OCR/QR/voice and IndexedDB sync; server/ contains auth/RLS/business/API; shared/ holds strict contracts; supabase/migrations/ holds the unchanged FORCE-RLS baseline. scripts/migration-runner.ts implements private checksummed history; scripts/migrate.ts is its CLI.
+
+Integer paise/millilitres. Session supplies tenant/employee; server supplies amount/points/fraud. Immutable durable idempotency. Third and later same-plate/pump/station-day fills are fraud with zero points. Server acceptance determines price/day, including queued requests. Points ledger is append-only; spending is not implemented. Coupons are expiring plate-bound single-use entitlements, not monetary discounts.
+
+Offline queue is device-local, requires original valid account for sync; no promised cold offline login/closed-app sync. OCR/voice require review/confirmation and OCR assets must first be downloaded.
 
 ## Local setup
-Requires Node 24+, npm, PostgreSQL 17. Authenticate securely to the private repository:
-
+Requires Node 24 and fresh disposable PostgreSQL 17. Authenticate securely to the private repository:
 ```sh
 git clone https://github.com/edityyp/fuelpulse-app.git
 cd fuelpulse-app
 npm install
 cp .env.example .env
 ```
-
-Configure a FRESH local PostgreSQL database and its private administrator MIGRATION_DATABASE_URL in .env. Inspect the migration before applying:
-
+Never commit private .env values. Configure MIGRATION_DATABASE_URL for the local administrative owner. Review SQL and confirm app/fuelpulse_meta are not API-exposed (or no Data API exists locally); only then set FUELPULSE_PRIVATE_METADATA_CONFIRMED=true.
 ```sh
 npm run migrate
 ```
+History is fuelpulse_meta.migrations with SHA-256 checksums, owner-only grants and RLS. Legacy public history, unsafe metadata, changed/missing files and non-prefix history abort. Do not erase history or modify applied SQL. Migration SQL is trusted administrative code and must not contain transaction-control commands.
 
-If `app` schema/named roles already exist, stop and reconcile; never reset an unknown database. Provision a private LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS role with membership in fuelpulse_gateway. Set credentials via secure database console/password prompt, and set DATABASE_URL to that runtime account. Never run the app as migration administrator.
-
-Set BOOTSTRAP_STATION (lowercase slug), BOOTSTRAP_NAME, BOOTSTRAP_CODE, BOOTSTRAP_PASSWORD (12+ characters), APP_ORIGIN=http://localhost:3000 and PORT=3000 privately:
-
+Provision a separate LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS with fuelpulse_gateway membership. It must have no metadata access/owner membership. Set DATABASE_URL to that account; never run the server as migration owner. Configure APP_ORIGIN/PORT and private BOOTSTRAP_* secrets, bootstrap once, then remove admin/bootstrap secrets from runtime:
 ```sh
 npm run bootstrap
 npm run build
 npm start
 ```
+No default production password is shipped. Configure fuel prices and compatible pumps after signing in.
 
-Open http://localhost:3000. Sign in, configure fuel prices, then compatible pumps. No default production password is shipped. Remove bootstrap/admin secrets from runtime after initialization.
-
+## Tests and deployment gates
 ```sh
 npm run typecheck
 npm run lint
-npm run build
-# Isolated LOCAL TEST_ADMIN_DATABASE_URL + restricted DATABASE_URL required:
+# Disposable local migration/admin/runtime settings from docs/testing.md required:
+npm run test:migrations
 npm test
-# Running local QA server, QA_STATION/QA_PASSWORD and OCR fixture required:
-npm run test:browser
+npm run build
 ```
+Existing source ZIP includes the resolved package-lock.json and supports npm ci. GitHub dependency pins remain as before; that generated lockfile has not been newly uploaded by this tracker-only patch. No new dependencies were added. A previous GitHub workflow write was denied; no hosted CI pass is claimed.
 
-See docs/testing.md for fixture setup. `npm run dev` watches backend TS and serves the latest built frontend; run build after frontend changes. No Vite HMR proxy configured. The source ZIP includes the resolved package-lock.json (use npm ci with that ZIP); GitHub currently contains direct dependency pins but not the generated lockfile. CI workflow creation was denied by integration permissions.
-
-## Business rules
-Integer paise and millilitres. Session supplies organization/employee; server supplies amount/points/fraud. Immutable records and durable idempotency. Third and later accepted same-plate/pump/station-day fills flagged with zero points. Price/day use server acceptance, including offline requests. Points ledger is append-only; spending is not implemented. Coupons are expiring plate-bound single-use entitlements, not monetary discounts.
-
-Pending count is this device; foreground/manual/reconnect sync requires valid original account. Existing-tab offline refresh supported, cold offline login and closed-app sync not guaranteed. OCR/voice always require review and confirmation; first-use OCR requires downloaded assets.
-
-## Production gates
-Supabase target riywnbifqpsylsdocoyi, organization ixzbspygpwezetndczvm: NOT connected/inspected/modified. Read-only discovery then staging rehearsal and explicit production approval required. No remote reset/drop/truncate.
-
-Physical camera/microphone, Android/Windows installation, real-world OCR, deployed TLS/proxy, Docker execution, independent penetration/load/backup-restore testing remain NOT VERIFIED. Read docs/security.md and docs/deployment.md before live operation.
+Target is Supabase pbjftnlixuysmeotpsjc, host db.pbjftnlixuysmeotpsjc.supabase.co. Prior read-only audit found application-empty state and a matching database-host DNS address. **No Supabase writes/deployment are authorized or performed.** Reconfirm dashboard identity and hosted Data API exclusions (both app and fuelpulse_meta), staging/TLS/pooler behavior, secrets and backup readiness; obtain explicit database-write approval before deployment. Physical devices, Docker, sustained load, independent security and restore tests remain unverified. See docs/deployment.md.
