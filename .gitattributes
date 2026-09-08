@@ -1,0 +1,13 @@
+# Normalize all text files to LF on commit and LF on checkout.
+# This prevents CRLF vs LF SHA-256 mismatches between Windows-applied
+# migrations and Linux CI verification.
+* text=auto eol=lf
+
+# Explicitly ensure SQL migration files are always LF.
+*.sql text eol=lf
+
+# Keep binary files binary.
+*.png binary
+*.ico binary
+*.woff binary
+*.woff2 binary
