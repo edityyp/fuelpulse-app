@@ -1,0 +1,3 @@
+export class ApiError extends Error{constructor(public status:number,message:string){super(message);}}
+export async function api<T>(path:string,body?:unknown,actor?:string):Promise<T>{const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(actor?{'X-FuelPulse-Actor':actor}:{})},body:body===undefined?undefined:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new ApiError(r.status,data.error??'Request failed');return data;}
+export const money=(v:string|number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(Number(v)/100);export const errorText=(e:unknown)=>e instanceof Error?e.message:'Unexpected error';
