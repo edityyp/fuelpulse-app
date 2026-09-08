@@ -1,0 +1,1 @@
+import {buildApp} from './app.js';import {pool} from './db.js';const app=await buildApp();await app.listen({host:'0.0.0.0',port:Number(process.env.PORT??3000)});for(const s of ['SIGTERM','SIGINT'])process.on(s,async()=>{await app.close();await pool.end();process.exit(0);});
