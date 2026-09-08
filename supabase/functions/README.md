@@ -1,0 +1,1 @@
+Privileged operations run in the same-origin Fastify backend. No duplicate Edge Functions are needed. Remote project riywnbifqpsylsdocoyi is NOT connected or modified. Do not expose the app schema through the Data API.
