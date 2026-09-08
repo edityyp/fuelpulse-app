@@ -1,12 +1,10 @@
-# Dependencies and generated outputs
 node_modules/
 dist/
+build/
 coverage/
 playwright-report/
 test-results/
 *.log
-
-# Private environment and credentials
 .env
 .env.*
 !.env.example
@@ -16,8 +14,6 @@ test-results/
 *.pfx
 credentials.json
 service-account*.json
-
-# Local databases, dumps, tooling and editor state
 *.dump
 *.sql.gz
 .pgdata/
@@ -27,6 +23,4 @@ supabase/.temp/
 .DS_Store
 .idea/
 .vscode/
-
-# Local archives are exported separately; Git commits retain source history
 backups/*.zip
