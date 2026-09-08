@@ -14,11 +14,6 @@ env:
 
 jobs:
   # ── Job 1: Hosted Supabase Verification ─────────────────────────────────────
-  # Connects to the live Supabase database and runs the full schema/RLS/metadata
-  # verification suite. Requires these GitHub repository secrets:
-  #   MIGRATION_DATABASE_URL  — postgres admin connection (rotated password)
-  #   SUPABASE_URL            — https://pbjftnlixuysmeotpsjc.supabase.co
-  #   SUPABASE_ANON_KEY       — anon JWT (enables HTTP exposure checks)
   hosted-verify:
     name: Hosted Supabase Verification
     runs-on: ubuntu-latest
@@ -43,8 +38,6 @@ jobs:
         run: npx tsx scripts/verify-hosted.ts
 
   # ── Job 2: Full 62-test suite (local PostgreSQL, no Supabase) ────────────────
-  # The existing test files guard against remote databases by checking for
-  # localhost in the connection URL. This job provides an isolated local cluster.
   unit-tests:
     name: Unit & Security Tests (62)
     runs-on: ubuntu-latest
@@ -80,12 +73,17 @@ jobs:
           PGPASSWORD: testpw
         run: |
           PSQL="psql -h localhost -U postgres -d fuelpulse_test"
-          # Roles required by migration-runner.test.ts (must exist before runner tests)
           for role in anon authenticated service_role authenticator fuelpulse_test_runtime; do
             $PSQL -c "CREATE ROLE \"$role\" NOLOGIN NOBYPASSRLS;" 2>/dev/null || true
           done
-          # service_role needs BYPASSRLS (mirrors migration-runner.test.ts setup)
           $PSQL -c "ALTER ROLE service_role BYPASSRLS;" 2>/dev/null || true
+          # migration-test-owner: migration 18 creates this role without a password, but
+          # the test immediately connects as it using the URL password 'testpw'.
+          # Pre-create with that password so scram-sha-256 auth succeeds.
+          # The test's IF-NOT-EXISTS guard skips re-creation.
+          psql -h localhost -U postgres -d postgres \
+            -c "CREATE ROLE \"migration-test-owner\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD 'testpw';" \
+            2>/dev/null || true
 
       - name: Apply FuelPulse migration to local test database
         env:
@@ -102,11 +100,8 @@ jobs:
 
       - name: "Run application tests (tests 01-31: security, password, assist)"
         env:
-          # Must be localhost — tests guard against remote databases
           TEST_ADMIN_DATABASE_URL: postgresql://postgres:testpw@localhost:5432/fuelpulse_test
-          # Pool connection; postgres can SET LOCAL ROLE to fuelpulse_app/gateway
           DATABASE_URL: postgresql://postgres:testpw@localhost:5432/fuelpulse_test
-          # 32-byte key for AES-GCM; test 02 overrides with its own fresh key
           CREDENTIAL_KEY: ci-test-key-0000000000000000000000
           NODE_ENV: test
         run: |
@@ -117,7 +112,6 @@ jobs:
 
       - name: "Run migration runner tests (tests 01-31: 31 migration cases)"
         env:
-          # Disposable local cluster — runner creates/drops temp databases
           MIGRATION_TEST_DATABASE_URL: postgresql://postgres:testpw@localhost:5432/postgres
           MIGRATION_TEST_ALLOW_DATABASE_CREATION: 'true'
         run: npm run test:migrations
@@ -164,8 +158,6 @@ jobs:
           retention-days: 3
 
   # ── Job 4: Browser E2E + PWA / Offline Tests ─────────────────────────────────
-  # Tests login flow, role navigation, OCR, service worker, offline queue, and
-  # queue reconciliation. Requires GitHub secret QA_PASSWORD.
   browser-e2e:
     name: Browser E2E & PWA (Playwright)
     runs-on: ubuntu-latest
@@ -246,14 +238,12 @@ jobs:
             SELECT password_hash INTO owner_hash
               FROM app.credentials c JOIN app.users u ON u.id=c.user_id
              WHERE u.organization_id = org_id AND u.code = 'OWNER';
-            -- Add MANAGER and EMPLOYEE with the same password hash
             INSERT INTO app.users(organization_id, name, code, role)
             VALUES (org_id, 'QA Manager',  'MANAGER',  'MANAGER'),
                    (org_id, 'QA Employee', 'EMPLOYEE', 'EMPLOYEE');
             INSERT INTO app.credentials(user_id, password_hash)
               SELECT id, owner_hash FROM app.users
                WHERE organization_id = org_id AND code IN ('MANAGER','EMPLOYEE');
-            -- Pump and fuel
             INSERT INTO app.pumps(organization_id, name)
             VALUES (org_id, 'Pump 01') RETURNING id INTO pump_id;
             INSERT INTO app.fuels(organization_id, name, price_paise)
@@ -261,6 +251,9 @@ jobs:
             INSERT INTO app.pump_fuels VALUES (org_id, pump_id, fuel_id);
           END $$;
           SQL
+
+      - name: Install Python Pillow for OCR plate fixture
+        run: pip install pillow==10.4.0
 
       - name: Generate plate fixture for OCR test
         run: |
@@ -291,7 +284,6 @@ jobs:
         run: |
           node --env-file-if-exists=.env build/server/index.js &
           echo $! > /tmp/server.pid
-          # Wait for server to be ready
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
               echo "Server ready after ${i}s"
@@ -299,7 +291,7 @@ jobs:
             fi
             sleep 1
           done
-          curl -sf http://localhost:3000/api/health || { echo 'Server failed to start'; cat /tmp/server.log 2>/dev/null; exit 1; }
+          curl -sf http://localhost:3000/api/health || { echo 'Server failed to start'; exit 1; }
 
       - name: Run browser E2E and PWA tests
         env:
@@ -308,7 +300,6 @@ jobs:
           QA_STATION: local-qa
           CHROMIUM_PATH: ''
         run: |
-          # Set CHROMIUM_PATH to the playwright-installed executable
           export CHROMIUM_PATH=$(node -e "const {chromium}=require('playwright');console.log(chromium.executablePath())")
           npx tsx scripts/browser-test.ts
 
@@ -324,7 +315,7 @@ jobs:
         if: always()
         run: kill $(cat /tmp/server.pid) 2>/dev/null || true
 
-  # ── Final gate: require all jobs to pass ──────────────────────────────────────
+  # ── Final gate ──────────────────────────────────────────────────────
   all-clear:
     name: All checks passed
     runs-on: ubuntu-latest
