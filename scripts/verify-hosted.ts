@@ -27,6 +27,9 @@ const EXPECTED_TABLES = [
 ];
 const MIGRATION_NAME = '202609080001_initial.sql';
 const MIGRATION_PATH = 'supabase/migrations/' + MIGRATION_NAME;
+// SHA-256 of the migration file with LF line endings (canonical Git-stored form).
+// If the migration was applied on Windows with CRLF bytes, the DB stores a CRLF SHA;
+// Phase 4 accepts both variants. The LF SHA here is authoritative for file integrity.
 const EXPECTED_SHA = '92da7987e5559af29b2fb3d903dec722d74541f163d906aaa969f2f00c582c44';
 const EXPECTED_POLICIES = 26;
 
@@ -67,7 +70,7 @@ async function main() {
 
   await client.connect();
 
-  // ── Phase 1: Identity ─────────────────────────────────────────
+  // -- Phase 1: Identity
   console.log('\nPhase 1: Target identity');
   {
     const r = (await client.query(`
@@ -89,7 +92,7 @@ async function main() {
     ok('migration-applied', 'fuelpulse_meta schema found');
   }
 
-  // ── Phase 2: Schema structure ─────────────────────────────────
+  // -- Phase 2: Schema structure
   console.log('\nPhase 2: Schema structure -- 14 tables, FORCE RLS, 26 policies');
   {
     const tables: string[] = (await client.query(`
@@ -138,7 +141,7 @@ async function main() {
     ok('indexes', requiredIndexes.join(', '));
   }
 
-  // ── Phase 3: Roles and grants ─────────────────────────────────
+  // -- Phase 3: Roles and grants
   console.log('\nPhase 3: Roles and grants');
   {
     for (const role of ['fuelpulse_app', 'fuelpulse_gateway']) {
@@ -160,7 +163,6 @@ async function main() {
     if (!inh) bad('gateway-inherits-app', 'fuelpulse_gateway does not have fuelpulse_app granted');
     ok('gateway-inherits-app');
 
-    // fuelpulse_app: SELECT+INSERT on transactions, NO DELETE
     const txApp = (await client.query(`
       SELECT
         has_table_privilege('fuelpulse_app', 'app.transactions', 'SELECT') AS sel,
@@ -171,7 +173,6 @@ async function main() {
     if (txApp.del) bad('app-transactions-no-delete', 'fuelpulse_app must NOT have DELETE on transactions');
     ok('app-transactions-grants', 'SELECT, INSERT; no DELETE');
 
-    // fuelpulse_app: SELECT+UPDATE on organizations, NO INSERT/DELETE
     const orgApp = (await client.query(`
       SELECT
         has_table_privilege('fuelpulse_app', 'app.organizations', 'SELECT') AS sel,
@@ -183,7 +184,6 @@ async function main() {
     if (orgApp.ins || orgApp.del) bad('app-organizations-no-insert-delete', 'fuelpulse_app must NOT have INSERT/DELETE on organizations');
     ok('app-organizations-grants', 'SELECT, UPDATE only');
 
-    // fuelpulse_gateway: full CRUD on credentials
     const gwCred = (await client.query(`
       SELECT
         has_table_privilege('fuelpulse_gateway', 'app.credentials', 'SELECT') AS sel,
@@ -194,14 +194,12 @@ async function main() {
     if (!gwCred.sel || !gwCred.ins || !gwCred.upd || !gwCred.del) bad('gateway-credentials-grants', JSON.stringify(gwCred));
     ok('gateway-credentials-grants', 'SELECT, INSERT, UPDATE, DELETE');
 
-    // fuelpulse_app must NOT have access to credentials
     const appCred = (await client.query(`
       SELECT has_table_privilege('fuelpulse_app', 'app.credentials', 'SELECT') AS sel
     `)).rows[0];
     if (appCred.sel) bad('app-no-credentials-access', 'fuelpulse_app must NOT have SELECT on app.credentials');
     ok('app-no-credentials-access', 'fuelpulse_app cannot read credentials');
 
-    // PUBLIC revoked from app schema
     const pubUsage = (await client.query(`
       SELECT has_schema_privilege('public', 'app', 'USAGE') AS usage
     `)).rows[0].usage;
@@ -209,7 +207,7 @@ async function main() {
     ok('app-schema-public-revoked', 'PUBLIC has no USAGE on app schema');
   }
 
-  // ── Phase 4: Migration metadata privacy ──────────────────────
+  // -- Phase 4: Migration metadata privacy
   console.log('\nPhase 4: Migration metadata privacy');
   {
     const history: { name: string; sha256: string; applied_at: Date }[] =
@@ -219,17 +217,37 @@ async function main() {
     if (history[0].name !== MIGRATION_NAME) bad('metadata-name', `Expected ${MIGRATION_NAME}, got ${history[0].name}`);
     ok('metadata-1-row', `applied at ${history[0].applied_at}`);
 
-    let fileSha: string;
+    const dbSha = history[0].sha256;
+
+    // Read the migration file and compute both LF and CRLF SHA-256 variants.
+    // The migration runner hashes the raw bytes it reads on disk. If applied on Windows
+    // with Git autocrlf=true, files are checked out with \r\n and the CRLF SHA is stored.
+    // The CI checkout on Linux produces LF bytes. We accept both variants so that
+    // Windows-applied migrations pass verification without weakening the integrity check:
+    // the SQL content is byte-for-byte identical modulo line endings.
     try {
-      const sql = await readFile(MIGRATION_PATH, 'utf8');
-      fileSha = createHash('sha256').update(sql).digest('hex');
-      if (fileSha !== EXPECTED_SHA) bad('migration-file-sha', `File SHA ${fileSha} != expected ${EXPECTED_SHA}`);
-    } catch {
-      console.log(`  ! Could not read ${MIGRATION_PATH} (CI may not have it in cwd)`);
-      fileSha = EXPECTED_SHA;
+      const raw = await readFile(MIGRATION_PATH);
+      // Normalize to LF for the canonical integrity check
+      const lfText = raw.toString('utf8').replace(/\r\n/g, '\n');
+      const lfSha = createHash('sha256').update(Buffer.from(lfText)).digest('hex');
+      // CRLF variant: what Windows Git autocrlf=true produces
+      const crlfSha = createHash('sha256').update(Buffer.from(lfText.replace(/\n/g, '\r\n'))).digest('hex');
+
+      if (lfSha !== EXPECTED_SHA)
+        bad('migration-file-sha', `File SHA (LF-normalized) ${lfSha} != expected ${EXPECTED_SHA} -- file may have been modified`);
+      ok('migration-file-sha', `file integrity verified (LF SHA: ${lfSha})`);
+
+      if (dbSha !== lfSha && dbSha !== crlfSha)
+        bad('metadata-sha256', `DB sha256 ${dbSha} does not match LF (${lfSha}) or CRLF (${crlfSha}) variant -- unexpected modification`);
+      const variant = dbSha === lfSha ? 'LF' : 'CRLF (Windows-applied migration)';
+      ok('metadata-sha256', `DB sha256 matches ${variant}: ${dbSha}`);
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      console.log(`  ! Could not read ${MIGRATION_PATH} (file not in working directory)`);
+      if (dbSha !== EXPECTED_SHA)
+        bad('metadata-sha256', `DB sha256 ${dbSha} != expected ${EXPECTED_SHA} (file unavailable for CRLF-variant check; was migration applied on Windows?)`);
+      ok('metadata-sha256', `DB sha256 matches expected constant: ${dbSha}`);
     }
-    if (history[0].sha256 !== fileSha) bad('metadata-sha256', `DB has ${history[0].sha256}, expected ${fileSha}`);
-    ok('metadata-sha256', history[0].sha256);
 
     const metaRls = (await client.query(`
       SELECT relrowsecurity, relforcerowsecurity
@@ -266,7 +284,7 @@ async function main() {
     ok('no-legacy-tracker', 'No legacy public tracker');
   }
 
-  // ── Phase 5: PostgREST / Data API exposure ────────────────────
+  // -- Phase 5: PostgREST / Data API exposure
   console.log('\nPhase 5: PostgREST / Data API exposure');
   {
     const pgrstSchemas = (await client.query(
@@ -278,18 +296,9 @@ async function main() {
     }
     ok('pgrst-no-fuelpulse_meta', `pgrst.db_schemas = "${pgrstSchemas || '(not set at db level)'}"`);
 
-    const exposedSchemas = pgrstSchemas.split(',').map((s: string) => s.trim());
-    if (exposedSchemas.some((s: string) => s === 'app' || s === 'public')) {
-      ok('pgrst-app-exposure-configured', `app in pgrst.db_schemas: "${pgrstSchemas}"`);
-    } else {
-      console.log(`  ! pgrst.db_schemas does not include 'app' at DB level`);
-      console.log('    Configure: Supabase Dashboard > Settings > API > Exposed schemas > add app');
-    }
-
     if (supabaseUrl && anonKey) {
       const baseHeaders = { apikey: anonKey, Authorization: `Bearer ${anonKey}` };
 
-      // fuelpulse_meta MUST be blocked
       const metaRes = await httpGet(
         `${supabaseUrl}/rest/v1/migrations?select=sha256`,
         { ...baseHeaders, 'Accept-Profile': 'fuelpulse_meta' }
@@ -302,7 +311,6 @@ async function main() {
       }
       ok('http-fuelpulse_meta-blocked', `HTTP ${metaRes.status} -- fuelpulse_meta not exposed via REST`);
 
-      // app.organizations must return empty for anon (RLS blocks)
       const orgRes = await httpGet(
         `${supabaseUrl}/rest/v1/organizations?select=id`,
         { ...baseHeaders, 'Accept-Profile': 'app' }
@@ -314,7 +322,6 @@ async function main() {
         ok('http-app-rls-empty', 'Anonymous query to app.organizations returns [] -- RLS active');
       } else if (orgRes.status === 404 || orgRes.status === 406) {
         console.log(`  ! app schema not yet exposed via PostgREST (HTTP ${orgRes.status})`);
-        console.log('    Configure: Supabase Dashboard > Settings > API > Exposed schemas > add app');
       } else {
         ok('http-app-response', `HTTP ${orgRes.status}`);
       }
@@ -323,17 +330,15 @@ async function main() {
       ok('http-postgrest-health', `PostgREST root HTTP ${health.status}`);
     } else {
       console.log('  ! SUPABASE_URL / SUPABASE_ANON_KEY not set -- HTTP checks skipped');
-      console.log('    Add SUPABASE_URL and SUPABASE_ANON_KEY to GitHub secrets to enable them.');
     }
   }
 
-  // ── Phase 6: Tenant isolation ──────────────────────────────────
+  // -- Phase 6: Tenant isolation
   console.log('\nPhase 6: Tenant isolation (transactional -- always rolled back)');
   {
     await client.query('BEGIN');
     let isolationOk = false;
     try {
-      // Insert two test organisations as postgres admin
       const orgA: string = (await client.query(
         `INSERT INTO app.organizations(slug,name) VALUES('ci-verify-tenant-a','CI Verify A') RETURNING id`
       )).rows[0].id;
@@ -341,13 +346,11 @@ async function main() {
         `INSERT INTO app.organizations(slug,name) VALUES('ci-verify-tenant-b','CI Verify B') RETURNING id`
       )).rows[0].id;
 
-      // Insert a pump for each org
       const pumpA: string = (await client.query(
         `INSERT INTO app.pumps(organization_id,name) VALUES($1,'Pump-A') RETURNING id`, [orgA]
       )).rows[0].id;
       await client.query(`INSERT INTO app.pumps(organization_id,name) VALUES($1,'Pump-B')`, [orgB]);
 
-      // Switch to fuelpulse_app with org A context (SET LOCAL -- reverts on ROLLBACK)
       await client.query(`SET LOCAL ROLE fuelpulse_app`);
       await client.query(
         `SELECT set_config('app.org',$1,true),
@@ -356,7 +359,6 @@ async function main() {
         [orgA]
       );
 
-      // Org A actor should see ONLY org A's pump
       const seen: { id: string; organization_id: string }[] =
         (await client.query(`SELECT id, organization_id FROM app.pumps ORDER BY id`)).rows;
 
@@ -365,7 +367,6 @@ async function main() {
       if (seen[0].organization_id !== orgA) bad('tenant-isolation-org', 'Result has wrong org ID');
       if (seen.some(p => p.organization_id === orgB)) bad('tenant-isolation-cross-org', 'Org B pump visible to org A actor!');
 
-      // Attempt cross-org update -- must return 0 rows
       const updateRes = await client.query(
         `UPDATE app.pumps SET active = false WHERE organization_id = $1 RETURNING id`, [orgB]
       );
@@ -376,12 +377,12 @@ async function main() {
     } catch (e) {
       if (!isolationOk) throw e;
     } finally {
-      await client.query('ROLLBACK'); // Always -- no test data survives
+      await client.query('ROLLBACK');
     }
     ok('tenant-isolation-cleanup', 'All test data rolled back -- no residue in production DB');
   }
 
-  // ── Summary ───────────────────────────────────────────────────
+  // -- Summary
   console.log('\n' + '='.repeat(52));
   console.log(`\u2713 ${passed.length} checks passed`);
   if (failed.length) {
@@ -389,7 +390,7 @@ async function main() {
     process.exit(1);
   }
   console.log('\nHOSTED VERIFICATION COMPLETE');
-  console.log('  Migration:        applied, SHA-256 verified');
+  console.log('  Migration:        applied, SHA-256 verified (LF or CRLF)');
   console.log('  14 tables:        all present in app schema');
   console.log('  FORCE RLS:        all 14 tables');
   console.log('  26 policies:      all active');
