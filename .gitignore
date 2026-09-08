@@ -1,0 +1,32 @@
+# Dependencies and generated outputs
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Private environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+
+# Local databases, dumps, tooling and editor state
+*.dump
+*.sql.gz
+.pgdata/
+postgres-data/
+supabase/.temp/
+.supabase/
+.DS_Store
+.idea/
+.vscode/
+
+# Local archives are exported separately; Git commits retain source history
+backups/*.zip
