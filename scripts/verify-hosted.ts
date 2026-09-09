@@ -20,6 +20,9 @@ import pg from 'pg';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
+const EXPECTED_SUPABASE_PROJECT_REF = 'pbjftnlixuysmeotpsjc';
+const FORBIDDEN_SUPABASE_PROJECT_REF = 'riywnbifqpsylsdocoyi';
+
 const EXPECTED_TABLES = [
   'audit_logs', 'coupons', 'credentials', 'daily_counts',
   'fuels', 'login_events', 'login_limits', 'organizations',
@@ -84,8 +87,11 @@ async function main() {
     ok('writable-connection', `db=${r.db} pg=${r.pg_ver} user=${r.cu}`);
 
     const host = new URL(connStr!).hostname;
-    if (host.includes('riywnbifqpsylsdocoyi')) bad('not-old-project', 'Host matches the excluded old project!');
+    if (host.includes(FORBIDDEN_SUPABASE_PROJECT_REF)) bad('not-old-project', 'Host matches the excluded old project!');
     ok('not-old-project', host);
+
+    if (!host.includes(EXPECTED_SUPABASE_PROJECT_REF)) bad('expected-project', `Unexpected host: ${host} (expected ${EXPECTED_SUPABASE_PROJECT_REF})`);
+    ok('expected-project', EXPECTED_SUPABASE_PROJECT_REF);
 
     const meta = (await client.query(`SELECT to_regnamespace('fuelpulse_meta') AS n`)).rows[0].n;
     if (!meta) bad('migration-applied', 'fuelpulse_meta schema missing -- migration may not have run');
