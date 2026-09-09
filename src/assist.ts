@@ -36,7 +36,7 @@ export async function ocr(file:File){
 
 export type PlateScanner={stop:()=>void};
 
-export async function scanPlate(video:HTMLVideoElement,onPlate:(value:string)=>void,onError:(message:string)=>void):Promise<PlateScanner>{
+export async function scanPlate(video:HTMLVideoElement,onPlate:(value:string)=>void,onError:(message:string)=>void,onProgress:(message:string)=>void):Promise<PlateScanner>{
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Live camera scanning is unavailable in this browser. Use the photo option instead.');
   const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
   video.srcObject=stream;
@@ -44,7 +44,7 @@ export async function scanPlate(video:HTMLVideoElement,onPlate:(value:string)=>v
   video.playsInline=true;
   await video.play();
   let worker:Awaited<ReturnType<typeof configuredWorker>>|undefined;
-  let stopped=false,running=false,timer:number|undefined,last='',matches=0;
+  let stopped=false,running=false,timer:number|undefined,attempts=0;
   const stop=()=>{
     if(stopped)return;
     stopped=true;
@@ -64,20 +64,23 @@ export async function scanPlate(video:HTMLVideoElement,onPlate:(value:string)=>v
     running=true;
     try{
       const sourceWidth=video.videoWidth,sourceHeight=video.videoHeight;
-      const cropWidth=Math.round(sourceWidth*.88),cropHeight=Math.round(sourceHeight*.34);
+      const cropWidth=Math.round(sourceWidth*.94),cropHeight=Math.round(sourceHeight*.44);
       const cropX=Math.round((sourceWidth-cropWidth)/2),cropY=Math.round((sourceHeight-cropHeight)/2);
       const scale=Math.min(2,1200/cropWidth);
       canvas.width=Math.max(1,Math.round(cropWidth*scale));
       canvas.height=Math.max(1,Math.round(cropHeight*scale));
       ctx.filter='grayscale(1) contrast(1.65)';
       ctx.drawImage(video,cropX,cropY,cropWidth,cropHeight,0,0,canvas.width,canvas.height);
-      const detected=plateFromOcrText((await worker!.recognize(canvas)).data.text);
-      if(detected===last)matches++;else{last=detected;matches=1;}
-      if(matches>=2){stop();onPlate(detected);return;}
+      attempts++;
+      onProgress(`Reading frame ${attempts}… Keep the plate steady.`);
+      const result=await worker!.recognize(canvas),detected=plateFromOcrText(result.data.text);
+      if(result.data.confidence>=20){stop();onPlate(detected);return;}
+      onProgress(`Possible plate ${detected}. Move closer and hold steady.`);
     }catch(error){
       if(stopped)return;
       const message=error instanceof Error?error.message:String(error);
-      if(!message.startsWith('Plate unclear'))onError(message);
+      if(message.startsWith('Plate unclear'))onProgress('No clear plate yet. Move closer, avoid glare and fill the green guide.');
+      else onError(message);
     }finally{running=false;}
     if(!stopped)timer=window.setTimeout(inspect,450);
   };
