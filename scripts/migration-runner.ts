@@ -7,6 +7,20 @@ import { createHash } from 'node:crypto';
 export class MigrationSafetyError extends Error {}
 const apiRoles = ['anon', 'authenticated', 'service_role', 'authenticator'];
 const fail = (message: string): never => { throw new MigrationSafetyError(message); };
+
+// ── Supabase target safety ───────────────────────────────────────────────────
+// Hard guardrail to prevent accidentally running migrations against the wrong
+// Supabase project.
+const EXPECTED_SUPABASE_PROJECT_REF = 'pbjftnlixuysmeotpsjc';
+const FORBIDDEN_SUPABASE_PROJECT_REF = 'riywnbifqpsylsdocoyi';
+function verifySupabaseTarget(connectionString: string) {
+  let host = '';
+  try { host = new URL(connectionString).hostname; } catch { fail('Invalid MIGRATION_DATABASE_URL'); }
+  if (host.includes(FORBIDDEN_SUPABASE_PROJECT_REF)) fail('Forbidden Supabase target (old project)');
+  if (!host.includes(EXPECTED_SUPABASE_PROJECT_REF))
+    fail(`Unexpected Supabase target host: ${host} (expected ${EXPECTED_SUPABASE_PROJECT_REF})`);
+}
+
 const ident = (name: string) => '"' + name.replaceAll('"', '""') + '"';
 
 type Migration = { name: string; sql: string; sha256: string };
@@ -111,6 +125,9 @@ async function verifyMetadata(c: pg.Client, owner: string) {
 export type MigrationOptions = { connectionString: string; directory: string; privateMetadataConfirmed: boolean };
 export async function runMigrations(options: MigrationOptions): Promise<{ applied: string[]; skipped: number }> {
   if (!options.privateMetadataConfirmed) fail('Confirm fuelpulse_meta is excluded from Data API before migrating');
+
+  verifySupabaseTarget(options.connectionString);
+
   const files = await readMigrations(options.directory); // Snapshot exact executable bytes before any DB mutation.
   const c = new pg.Client({ connectionString: options.connectionString, connectionTimeoutMillis: 5000, statement_timeout: 60000 });
   const applied: string[] = [];
@@ -151,7 +168,6 @@ export async function runMigrations(options: MigrationOptions): Promise<{ applie
     }
     if (history.some((row, i) => files[i]?.name !== row.name)) fail('Applied history is not an ordered migration prefix');
     for (const file of files.slice(history.length)) {
-      // Migration files are trusted, reviewed repository SQL, not user input.
       await c.query(file.sql);
       await c.query('INSERT INTO fuelpulse_meta.migrations(name,sha256) VALUES($1,$2)', [file.name,file.sha256]);
       applied.push(file.name);
