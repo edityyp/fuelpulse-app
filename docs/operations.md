@@ -1,5 +1,29 @@
 # Operations
 
+## Provision a new customer company/station
+
+Each paying business customer must have a separate organization with a unique Station ID. Never add a different company as staff inside an existing customer station. Forced PostgreSQL row-level security scopes staff, transactions, vehicles, customer records, points, rewards, pumps, and reports to the signed-in organization.
+
+1. Choose a unique lowercase Station ID such as `green-fuels-delhi`. It is permanent login information, not a secret.
+2. Use an administrative database connection only for the one-off command. Never expose it to the browser or leave it configured in the runtime service.
+3. Run the provisioning command from a trusted operator terminal:
+
+```bash
+PROVISION_STATION=green-fuels-delhi \
+PROVISION_NAME="Green Fuels Delhi" \
+PROVISION_OWNER_NAME="Green Fuels Owner" \
+PROVISION_FUEL_PRICE_PAISE=10000 \
+MIGRATION_DATABASE_URL="$PRIVATE_ADMIN_DATABASE_URL" \
+npm run provision:station
+```
+
+4. The command atomically creates the organization, OWNER, password hash, default fuel, Pump 01, and pump/fuel link. It refuses a duplicate Station ID.
+5. Copy the displayed Station ID, OWNER code, and generated initial password into a password manager. Give them privately to the customer. Do not send passwords in a public chat or shared document.
+6. Ask the OWNER to sign in, verify the Station ID shown in the app header/Profile, change the initial password, set the real fuel price, and add only that station's managers/employees from **Staff**.
+7. Remove the administrative database URL from the terminal/session after provisioning.
+
+Repeat this command with a different Station ID for every new business customer. A customer station's OWNER can create MANAGER and EMPLOYEE accounts inside that station, but cannot view or create another organization.
+
 - Review fraud indicators and device-local pending queues. Fraud records still represent recorded fuel sales but earn zero points. Third and later same-day/pump/plate submissions are flagged.
 - Pending entries are not confirmed records. Reconnect and sign in as the original staff user before retry. Do not clear browser data while pending entries exist. A failed request retains its UUID; investigate existing server record before creating a replacement key.
 - Permanent queue validation failures remain visible/retryable; correction/discard UI is not yet implemented. Use controlled support review, not blind developer-tools edits or clearing storage.
