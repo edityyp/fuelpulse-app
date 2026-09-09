@@ -1,1 +1,9 @@
-W2J1aWxkXQpidWlsZGVyID0gImRvY2tlcmZpbGUiCmRvY2tlcmZpbGVQYXRoID0gIkRvY2tlcmZpbGUiCgpbZGVwbG95XQpoZWFsdGhjaGVja1BhdGggPSAiL2FwaS9oZWFsdGgiCmhlYWx0aGNoZWNrVGltZW91dCA9IDEwCnJlc3RhcnRQb2xpY3lUeXBlID0gIm9uX2ZhaWx1cmUiCnJlc3RhcnRQb2xpY3lNYXhSZXRyaWVzID0gNQo=
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 10
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
