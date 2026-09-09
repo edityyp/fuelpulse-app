@@ -1,5 +1,31 @@
-import {z} from 'zod';
-export const role=z.enum(['OWNER','MANAGER','EMPLOYEE']);export const plate=z.string().trim().toUpperCase().replace(/[^A-Z0-9]/g,'').pipe(z.string().min(4).max(15).regex(/^[A-Z0-9]+$/));export const coupon=z.string().regex(/^FP1:[a-f0-9]{48}$/);export const paymentMethod=z.enum(['CASH','UPI']);
-export const transaction=z.object({idempotency_key:z.uuid(),pump_id:z.uuid(),fuel_id:z.uuid(),plate,payment_method:paymentMethod.default('CASH'),quantity_ml:z.number().int().min(100).max(2000000).optional(),requested_amount_paise:z.number().int().min(100).max(100000000).optional()}).strict().superRefine((v,ctx)=>{if((v.quantity_ml===undefined)===(v.requested_amount_paise===undefined))ctx.addIssue({code:'custom',message:'Provide exactly one of quantity_ml or requested_amount_paise'});});
-export const login=z.object({station:z.string().min(3).max(80),code:z.string().min(3).max(40),password:z.string().min(1).max(128)}).strict();export const password=z.string().min(12).max(128).regex(/[a-z]/).regex(/[A-Z]/).regex(/[0-9]/).regex(/[^A-Za-z0-9]/);
-export type Input=z.infer<typeof transaction>;export type Actor={id:string;organization_id:string;name:string;code:string;role:z.infer<typeof role>};export type Catalog={organization:{id:string;name:string;slug:string;timezone:string;points_per_litre:number;reward_threshold_points:number;reward_name:string};pumps:{id:string;name:string;active:boolean}[];fuels:{id:string;name:string;price_paise:number}[];links:{pump_id:string;fuel_id:string}[]};export type Sale={id:string;plate:string;quantity_ml:number;amount_paise:string;payment_method:z.infer<typeof paymentMethod>;points:number;fraud:boolean;created_at:string};
+import { z } from "zod";
+export const plate = z
+  .string()
+  .max(40)
+  .transform((v) => v.toUpperCase().replace(/[\s-]/g, ""))
+  .pipe(z.string().regex(/^[A-Z0-9]{4,15}$/));
+export const password = z.string().min(12).max(128);
+export const paymentMethod = z.enum(["CASH", "UPI"]);
+export const transaction = z
+  .object({
+    idempotency_key: z.uuid(),
+    pump_id: z.uuid(),
+    fuel_id: z.uuid(),
+    plate,
+    payment_method: paymentMethod.default("CASH"),
+    quantity_ml: z.number().int().min(100).max(2000000).optional(),
+    requested_amount_paise: z.number().int().min(100).max(100000000).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if ((value.quantity_ml === undefined) === (value.requested_amount_paise === undefined))
+      ctx.addIssue({code: "custom",message: "Provide either litres or amount, not both"});
+  });
+export const coupon = z.string().regex(/^FP1:[a-f0-9]{48}$/);
+export const login = z.object({station: z.string().regex(/^[a-z0-9-]{3,40}$/),code: z.string().min(3).max(40),password: z.string().min(1).max(128)}).strict();
+export type Input = z.infer<typeof transaction>;
+export type Actor = {id:string;organization_id:string;name:string;code:string;role:"OWNER"|"MANAGER"|"EMPLOYEE"};
+export type Pump = {id:string;name:string;active:boolean};
+export type Fuel = {id:string;name:string;price_paise:number};
+export type Catalog = {organization:{name:string;points_per_litre:number;reward_threshold_points:number;reward_name:string};pumps:Pump[];fuels:Fuel[];links:{pump_id:string;fuel_id:string}[]};
+export type Sale = {id:string;plate:string;quantity_ml:number;amount_paise:string;payment_method:"CASH"|"UPI";points:number;fraud:boolean;created_at:string};
