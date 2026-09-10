@@ -164,10 +164,10 @@ export function CustomerPortal() {
     setError("");
 
     try {
-      const data = await api("/customer/identify", {
+      const data = (await api("/customer/identify", {
         station,
         plate,
-      });
+      })) as Result;
 
       setResult(data);
       stop();
@@ -412,8 +412,7 @@ export function CustomerPortal() {
                   points earned
                 </p>
 
-                {result.reward.available.length >
-                0 ? (
+                {result.reward.available.length > 0 ? (
                   <div
                     className="reward-alert"
                     role="alert"
