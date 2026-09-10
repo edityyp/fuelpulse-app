@@ -981,6 +981,8 @@ export function TransactionForm({
         <div className="row">
           <span>Payment</span>
 
+        <div className="row">
+          <span>Payment</span>
           <strong>
             {payment}
           </strong>
