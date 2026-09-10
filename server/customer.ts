@@ -6,6 +6,7 @@ import { actor, limit } from "./auth.js";
 import { audit, fail, manage, tx } from "./db.js";
 import { digest } from "./crypto.js";
 import { plate, rewardCode } from "../shared/contracts.js";
+import { recognizeImage } from "./alpr.js";
 
 const station = z.string().regex(/^[a-z0-9-]{3,40}$/),
   phone = z.string().regex(/^\+[1-9][0-9]{7,14}$/),
@@ -91,6 +92,34 @@ async function ensureRewards(
 }
 
 export function customerRoutes(app: FastifyInstance) {
+  app.addContentTypeParser(
+    ["image/jpeg", "image/png", "image/webp"],
+    { parseAs: "buffer", bodyLimit: 4 * 1024 * 1024 },
+    (_request, body, done) => done(null, body),
+  );
+
+  // Customer-side ALPR (no session required). Rate limited by IP.
+  app.post("/api/customer/alpr", async (req) => {
+    const ip = digest(req.ip);
+    const ok = await tx(async (c) => limit(c, "cust-alpr:" + ip, 60));
+    if (!ok) fail(429, "Too many scans; try again later");
+
+    const image = req.body as Buffer;
+    if (!Buffer.isBuffer(image) || image.length < 128) fail(400, "Invalid image");
+
+    try {
+      const result = await recognizeImage(image);
+      const normalized = plate.safeParse(result.plate);
+      if (!normalized.success) fail(422, "Plate format was unclear");
+      return { ...result, plate: normalized.data, engine: "fast-alpr" };
+    } catch (error) {
+      fail(
+        422,
+        error instanceof Error ? error.message : "Plate recognition failed",
+      );
+    }
+  });
+
   app.get("/api/payment-dashboard", async (req) => {
     const a = await actor(req);
     manage(a);
@@ -251,15 +280,7 @@ export function customerRoutes(app: FastifyInstance) {
     }, a);
   });
 
-  /**
-   * Staff-side plate-photo redemption.
-   *
-   * Allows staff to redeem the oldest available reward for a vehicle by
-   * photographing its number plate (ALPR on the client) — no customer QR
-   * code required.  Staff must confirm the detected plate, select pump and
-   * fuel, then submit.  The server atomically claims the oldest unredeemed
-   * entitlement for the organisation + plate combination.
-   */
+  /** Staff-side plate-photo redemption. */
   app.post("/api/rewards/redeem-by-plate", async (req) => {
     const a = await actor(req),
       b = z
@@ -274,7 +295,6 @@ export function customerRoutes(app: FastifyInstance) {
         )
       ).rowCount;
       if (!valid) fail(400, "Pump and fuel are not available");
-      // Atomically claim the oldest unredeemed entitlement for this org+plate.
       const r = (
         await c.query(
           `update app.reward_entitlements
