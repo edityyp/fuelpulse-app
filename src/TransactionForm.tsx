@@ -27,7 +27,7 @@ const price=catalog.fuels.find(item=>item.id===fuel)?.price_paise;
 const lookupPlate=async(v:string)=>{try{setCustomer(await lookup(v))}catch{setCustomer(null)}};
 const detected=(v:string)=>{setPlate(v);setReview(false);void lookupPlate(v)};
 
-const startScanner=async()=>{stopCamera();setScanMessage("Opening rear camera…");setScanning(true);setBusy(true);setReview(false);await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));try{if(!video.current)throw Error("Camera preview unavailable");await openCamera(video.current);scanner.current=startFastAlprLive(video.current,v=>{detected(v);notify(`Plate ${v} detected. Check it before confirming.`);stopCamera();},setScanMessage,m=>{notify(m);stopCamera()},m=>{notify(m);stopCamera()});setScanMessage('Scanning…');}catch(error){stopCamera();notify(errorText(error))}finally{setBusy(false)}};
+const startScanner=async()=>{stopCamera();setScanMessage("Opening rear camera…");setScanning(true);setBusy(true);setReview(false);await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));try{if(!video.current)throw Error("Camera preview unavailable");await openCamera(video.current);scanner.current=startFastAlprLive(video.current,v=>{detected(v);notify(`Plate ${v} detected. Check it before confirming.`);stopCamera();},setScanMessage,m=>{notify(m);stopCamera()});setScanMessage('Scanning…');}catch(error){stopCamera();notify(errorText(error))}finally{setBusy(false)}};
 
 const amountPaise=entry==="AMOUNT"?Math.round(Number(value)*100):price?Math.round(Number(value)*price):0,quantityMl=entry==="LITRES"?Math.round(Number(value)*1000):price?Math.round(amountPaise*1000/price):0;
 
