@@ -51,7 +51,9 @@ type FastScanner = PlateScanner & {
   busy: boolean;
 };
 
-async function openCamera(video: HTMLVideoElement) {
+async function openCamera(
+  video: HTMLVideoElement,
+) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw Error(
       "Live scanning is unavailable. Use photo or manual entry.",
@@ -124,7 +126,9 @@ function startFastAlprLive(
     busy = true;
 
     try {
-      onProgress("Scanning… hold steady");
+      onProgress(
+        "Scanning… hold steady",
+      );
 
       const p = await fastAlprFrame(video);
 
@@ -135,7 +139,9 @@ function startFastAlprLive(
 
       onProgress(
         `Reading ${p}${
-          votes > 1 ? ` (${votes}×)` : ""
+          votes > 1
+            ? ` (${votes}×)`
+            : ""
         }`,
       );
 
@@ -160,7 +166,10 @@ function startFastAlprLive(
           : "Scanning…",
       );
 
-      if (Date.now() - started > 9000) {
+      if (
+        Date.now() - started >
+        9000
+      ) {
         stopped = true;
 
         onError(
@@ -181,7 +190,10 @@ function startFastAlprLive(
     }
   };
 
-  timer = window.setTimeout(tick, 250);
+  timer = window.setTimeout(
+    tick,
+    250,
+  );
 
   return {
     busy: false,
@@ -203,27 +215,42 @@ export function TransactionForm({
   lookup,
 }: {
   catalog: Catalog;
-  save: (value: Input) => Promise<void>;
-  notify: (message: string) => void;
+  save: (
+    value: Input,
+  ) => Promise<void>;
+  notify: (
+    message: string,
+  ) => void;
   lookup: (
     plate: string,
   ) => Promise<VehicleLookup>;
 }) {
-  const [pump, setPump] = useState("");
-  const [fuel, setFuel] = useState("");
-  const [plate, setPlate] = useState("");
-  const [value, setValue] = useState("");
+  const [pump, setPump] =
+    useState("");
+
+  const [fuel, setFuel] =
+    useState("");
+
+  const [plate, setPlate] =
+    useState("");
+
+  const [value, setValue] =
+    useState("");
 
   const [entry, setEntry] =
-    useState<"LITRES" | "AMOUNT">(
-      "LITRES",
-    );
+    useState<
+      "LITRES" | "AMOUNT"
+    >("LITRES");
 
   const [payment, setPayment] =
-    useState<"CASH" | "UPI">("CASH");
+    useState<
+      "CASH" | "UPI"
+    >("CASH");
 
   const [plateMode, setPlateMode] =
-    useState<"SCAN" | "MANUAL">("SCAN");
+    useState<
+      "SCAN" | "MANUAL"
+    >("SCAN");
 
   const [review, setReview] =
     useState(false);
@@ -235,34 +262,43 @@ export function TransactionForm({
     useState(false);
 
   const [scanMessage, setScanMessage] =
-    useState("Opening camera…");
+    useState(
+      "Opening camera…",
+    );
 
   const [customer, setCustomer] =
-    useState<VehicleLookup | null>(null);
+    useState<
+      VehicleLookup | null
+    >(null);
 
-  const [key, setKey] = useState(
-    crypto.randomUUID(),
-  );
+  const [key, setKey] =
+    useState(
+      crypto.randomUUID(),
+    );
 
   const [voiceField, setVoiceField] =
     useState("plate");
 
   const voiceStop =
-    useRef<(() => void) | undefined>(
-      undefined,
-    );
+    useRef<
+      (() => void) | undefined
+    >(undefined);
 
   const scanner =
-    useRef<PlateScanner | undefined>(
-      undefined,
-    );
+    useRef<
+      PlateScanner | undefined
+    >(undefined);
 
   const video =
-    useRef<HTMLVideoElement>(null);
+    useRef<
+      HTMLVideoElement
+    >(null);
 
   const stopCamera = () => {
     scanner.current?.stop();
-    scanner.current = undefined;
+
+    scanner.current =
+      undefined;
 
     setScanning(false);
 
@@ -276,83 +312,95 @@ export function TransactionForm({
     };
   }, []);
 
-  const price = catalog.fuels.find(
-    (item) => item.id === fuel,
-  )?.price_paise;
+  const price =
+    catalog.fuels.find(
+      (item) =>
+        item.id === fuel,
+    )?.price_paise;
 
-  const lookupPlate = async (
-    v: string,
-  ) => {
-    try {
-      setCustomer(await lookup(v));
-    } catch {
-      setCustomer(null);
-    }
-  };
-
-  const detected = (v: string) => {
-    setPlate(v);
-    setReview(false);
-
-    void lookupPlate(v);
-  };
-
-  const startScanner = async () => {
-    stopCamera();
-
-    setScanMessage(
-      "Opening rear camera…",
-    );
-
-    setScanning(true);
-    setBusy(true);
-    setReview(false);
-
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() =>
-        resolve(),
-      ),
-    );
-
-    try {
-      if (!video.current) {
-        throw Error(
-          "Camera preview unavailable",
+  const lookupPlate =
+    async (v: string) => {
+      try {
+        setCustomer(
+          await lookup(v),
         );
+      } catch {
+        setCustomer(null);
       }
+    };
 
-      await openCamera(video.current);
+  const detected =
+    (v: string) => {
+      setPlate(v);
+      setReview(false);
 
-      scanner.current =
-        startFastAlprLive(
+      void lookupPlate(v);
+    };
+
+  const startScanner =
+    async () => {
+      stopCamera();
+
+      setScanMessage(
+        "Opening rear camera…",
+      );
+
+      setScanning(true);
+      setBusy(true);
+      setReview(false);
+
+      await new Promise<void>(
+        (resolve) =>
+          requestAnimationFrame(
+            () => resolve(),
+          ),
+      );
+
+      try {
+        if (!video.current) {
+          throw Error(
+            "Camera preview unavailable",
+          );
+        }
+
+        await openCamera(
           video.current,
-
-          (v) => {
-            detected(v);
-
-            notify(
-              `Plate ${v} detected. Check it before confirming.`,
-            );
-
-            stopCamera();
-          },
-
-          setScanMessage,
-
-          (message) => {
-            notify(message);
-            stopCamera();
-          },
         );
 
-      setScanMessage("Scanning…");
-    } catch (error) {
-      stopCamera();
-      notify(errorText(error));
-    } finally {
-      setBusy(false);
-    }
-  };
+        scanner.current =
+          startFastAlprLive(
+            video.current,
+
+            (v) => {
+              detected(v);
+
+              notify(
+                `Plate ${v} detected. Check it before confirming.`,
+              );
+
+              stopCamera();
+            },
+
+            setScanMessage,
+
+            (message) => {
+              notify(message);
+              stopCamera();
+            },
+          );
+
+        setScanMessage(
+          "Scanning…",
+        );
+      } catch (error) {
+        stopCamera();
+        notify(
+          errorText(error),
+        );
+      } finally {
+        setBusy(false);
+      }
+    };
 
   const amountPaise =
     entry === "AMOUNT"
@@ -361,7 +409,8 @@ export function TransactionForm({
         )
       : price
         ? Math.round(
-            Number(value) * price,
+            Number(value) *
+              price,
           )
         : 0;
 
@@ -389,19 +438,24 @@ export function TransactionForm({
         </h2>
 
         <form
-          onSubmit={async (event) => {
+          onSubmit={async (
+            event,
+          ) => {
             event.preventDefault();
 
             try {
               const input =
                 transaction.parse({
-                  idempotency_key: key,
+                  idempotency_key:
+                    key,
                   pump_id: pump,
                   fuel_id: fuel,
                   plate,
-                  payment_method: payment,
+                  payment_method:
+                    payment,
 
-                  ...(entry === "LITRES"
+                  ...(entry ===
+                  "LITRES"
                     ? {
                         quantity_ml:
                           quantityMl,
@@ -430,7 +484,9 @@ export function TransactionForm({
                 crypto.randomUUID(),
               );
             } catch (error) {
-              notify(errorText(error));
+              notify(
+                errorText(error),
+              );
             } finally {
               setBusy(false);
             }
@@ -444,7 +500,9 @@ export function TransactionForm({
               required
               value={pump}
               onChange={(event) => {
-                setPump(event.target.value);
+                setPump(
+                  event.target.value,
+                );
                 setFuel("");
                 setReview(false);
               }}
@@ -455,7 +513,8 @@ export function TransactionForm({
 
               {catalog.pumps
                 .filter(
-                  (item) => item.active,
+                  (item) =>
+                    item.active,
                 )
                 .map((item) => (
                   <option
@@ -472,12 +531,15 @@ export function TransactionForm({
             <button
               type="button"
               className={
-                plateMode === "SCAN"
+                plateMode ===
+                "SCAN"
                   ? "active"
                   : ""
               }
               onClick={() =>
-                setPlateMode("SCAN")
+                setPlateMode(
+                  "SCAN",
+                )
               }
             >
               Scan plate
@@ -486,13 +548,16 @@ export function TransactionForm({
             <button
               type="button"
               className={
-                plateMode === "MANUAL"
+                plateMode ===
+                "MANUAL"
                   ? "active"
                   : ""
               }
               onClick={() => {
                 stopCamera();
-                setPlateMode("MANUAL");
+                setPlateMode(
+                  "MANUAL",
+                );
               }}
             >
               Enter manually
@@ -517,13 +582,16 @@ export function TransactionForm({
               }}
               onBlur={() => {
                 if (plate) {
-                  void lookupPlate(plate);
+                  void lookupPlate(
+                    plate,
+                  );
                 }
               }}
             />
           </label>
 
-          {plateMode === "SCAN" && (
+          {plateMode ===
+            "SCAN" && (
             <>
               <div className="camera-actions">
                 <button
@@ -543,16 +611,21 @@ export function TransactionForm({
                 </button>
 
                 <span className="muted">
-                  Auto-stops when stable.
-                  Move close; avoid glare.
+                  Auto-stops when
+                  stable. Move close;
+                  avoid glare.
                 </span>
               </div>
 
               <div
                 className={`plate-camera ${
-                  scanning ? "active" : ""
+                  scanning
+                    ? "active"
+                    : ""
                 }`}
-                aria-hidden={!scanning}
+                aria-hidden={
+                  !scanning
+                }
               >
                 <video
                   ref={video}
@@ -562,8 +635,8 @@ export function TransactionForm({
 
                 <div className="plate-guide">
                   <span>
-                    FILL THE FRAME WITH THE
-                    PLATE
+                    FILL THE FRAME
+                    WITH THE PLATE
                   </span>
                 </div>
 
@@ -573,7 +646,9 @@ export function TransactionForm({
                     role="status"
                   >
                     <i />
-                    {scanMessage}
+                    {
+                      scanMessage
+                    }
                   </div>
                 )}
               </div>
@@ -586,7 +661,8 @@ export function TransactionForm({
                   accept="image/*"
                   capture="environment"
                   disabled={
-                    busy || scanning
+                    busy ||
+                    scanning
                   }
                   onChange={async (
                     event,
@@ -613,10 +689,15 @@ export function TransactionForm({
                       );
                     } catch (error) {
                       notify(
-                        errorText(error),
+                        errorText(
+                          error,
+                        ),
                       );
                     } finally {
-                      setBusy(false);
+                      setBusy(
+                        false,
+                      );
+
                       event.target.value =
                         "";
                     }
@@ -624,22 +705,25 @@ export function TransactionForm({
                 />
 
                 <span className="muted">
-                  FastALPR with enhanced
-                  OCR fallback.
+                  FastALPR with
+                  enhanced OCR
+                  fallback.
                 </span>
               </label>
             </>
           )}
 
-          {plateMode === "MANUAL" && (
+          {plateMode ===
+            "MANUAL" && (
             <div className="info">
               <strong>
                 Manual entry enabled
               </strong>
 
               <p>
-                Type the vehicle number and
-                fill details below.
+                Type the vehicle
+                number and fill
+                details below.
               </p>
             </div>
           )}
@@ -651,8 +735,14 @@ export function TransactionForm({
               </strong>
 
               <p>
-                {customer.masked_phone} ·{" "}
-                {customer.balance} points
+                {
+                  customer.masked_phone
+                }{" "}
+                ·{" "}
+                {
+                  customer.balance
+                }{" "}
+                points
               </p>
 
               <p className="muted">
@@ -673,11 +763,14 @@ export function TransactionForm({
               pump={pump}
               fuel={fuel}
               rewards={
-                customer.rewards ?? []
+                customer.rewards ??
+                []
               }
               notify={notify}
               onRedeemed={() =>
-                lookupPlate(plate)
+                lookupPlate(
+                  plate,
+                )
               }
             />
           )}
@@ -730,7 +823,8 @@ export function TransactionForm({
                 value={payment}
                 onChange={(event) => {
                   setPayment(
-                    event.target.value as
+                    event.target
+                      .value as
                       | "CASH"
                       | "UPI",
                   );
@@ -753,12 +847,15 @@ export function TransactionForm({
             <button
               type="button"
               className={
-                entry === "LITRES"
+                entry ===
+                "LITRES"
                   ? "active"
                   : ""
               }
               onClick={() => {
-                setEntry("LITRES");
+                setEntry(
+                  "LITRES",
+                );
                 setValue("");
                 setReview(false);
               }}
@@ -769,12 +866,15 @@ export function TransactionForm({
             <button
               type="button"
               className={
-                entry === "AMOUNT"
+                entry ===
+                "AMOUNT"
                   ? "active"
                   : ""
               }
               onClick={() => {
-                setEntry("AMOUNT");
+                setEntry(
+                  "AMOUNT",
+                );
                 setValue("");
                 setReview(false);
               }}
@@ -784,29 +884,34 @@ export function TransactionForm({
           </div>
 
           <label>
-            {entry === "LITRES"
+            {entry ===
+            "LITRES"
               ? "Quantity (litres)"
               : "Customer amount (₹)"}
 
             <input
               aria-label={
-                entry === "LITRES"
+                entry ===
+                "LITRES"
                   ? "Quantity (litres)"
                   : "Customer amount (₹)"
               }
               type="number"
               min={
-                entry === "LITRES"
+                entry ===
+                "LITRES"
                   ? "0.1"
                   : "1"
               }
               max={
-                entry === "LITRES"
+                entry ===
+                "LITRES"
                   ? "2000"
                   : "1000000"
               }
               step={
-                entry === "LITRES"
+                entry ===
+                "LITRES"
                   ? "0.001"
                   : "0.01"
               }
@@ -830,9 +935,12 @@ export function TransactionForm({
                 <select
                   aria-label="Voice field"
                   value={voiceField}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setVoiceField(
-                      event.target.value,
+                      event.target
+                        .value,
                     )
                   }
                 >
@@ -855,7 +963,9 @@ export function TransactionForm({
                     voiceStop.current =
                       speak(
                         (text) => {
-                          setReview(false);
+                          setReview(
+                            false,
+                          );
 
                           if (
                             voiceField ===
@@ -869,7 +979,9 @@ export function TransactionForm({
                                   "",
                                 );
 
-                            setPlate(v);
+                            setPlate(
+                              v,
+                            );
 
                             void lookupPlate(
                               v,
@@ -878,7 +990,8 @@ export function TransactionForm({
                             setValue(
                               text.match(
                                 /\d+(\.\d+)?/,
-                              )?.[0] ?? "",
+                              )?.[0] ??
+                                "",
                             );
                           }
                         },
@@ -908,15 +1021,21 @@ export function TransactionForm({
             <div className="info">
               <strong>
                 Confirm {plate} ·{" "}
-                {quantityMl / 1000} L ·{" "}
-                {money(amountPaise)} ·{" "}
-                {payment}
+                {quantityMl /
+                  1000}{" "}
+                L ·{" "}
+                {money(
+                  amountPaise,
+                )}{" "}
+                · {payment}
               </strong>
 
               <p>
-                Price, litres, amount, points,
-                and fraud status are verified
-                by the server.
+                Price, litres,
+                amount, points,
+                and fraud status
+                are verified by the
+                server.
               </p>
             </div>
           )}
@@ -924,7 +1043,8 @@ export function TransactionForm({
           <button
             className="primary"
             disabled={
-              busy || scanning
+              busy ||
+              scanning
             }
           >
             {busy
@@ -942,26 +1062,33 @@ export function TransactionForm({
         </p>
 
         <h2>
-          {plate || "Vehicle not entered"}
+          {plate ||
+            "Vehicle not entered"}
         </h2>
 
         <div className="estimate">
           {value && price
-            ? money(amountPaise)
+            ? money(
+                amountPaise,
+              )
             : "₹ —"}
         </div>
 
         <p className="muted">
-          Server-authoritative estimate
+          Server-authoritative
+          estimate
         </p>
 
         <div className="row">
-          <span>Quantity</span>
+          <span>
+            Quantity
+          </span>
 
           <strong>
             {value && price
               ? (
-                  quantityMl / 1000
+                  quantityMl /
+                  1000
                 ).toFixed(3)
               : "—"}{" "}
             L
@@ -969,7 +1096,9 @@ export function TransactionForm({
         </div>
 
         <div className="row">
-          <span>Price / litre</span>
+          <span>
+            Price / litre
+          </span>
 
           <strong>
             {price
@@ -979,10 +1108,10 @@ export function TransactionForm({
         </div>
 
         <div className="row">
-          <span>Payment</span>
+          <span>
+            Payment
+          </span>
 
-        <div className="row">
-          <span>Payment</span>
           <strong>
             {payment}
           </strong>
@@ -994,9 +1123,12 @@ export function TransactionForm({
           </h3>
 
           <p>
-            Live scan uses FastALPR and
-            auto-stops when stable. You can
-            always correct the number before
+            Live scan uses
+            FastALPR and
+            auto-stops when
+            stable. You can
+            always correct the
+            number before
             confirming.
           </p>
         </div>
