@@ -1,0 +1,1 @@
+export interface Notifier{sendReceipt(phone:string,receiptId:string):Promise<{delivered:boolean;reason?:string}>}export const whatsapp:Notifier={async sendReceipt(){return {delivered:false,reason:'WhatsApp disabled; no provider credentials configured'};}};

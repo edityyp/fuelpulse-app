@@ -1,0 +1,339 @@
+name: FuelPulse CI — Verify, Test, Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  # ── Job 1: Hosted Supabase Verification ─────────────────────────────────────
+  hosted-verify:
+    name: Hosted Supabase Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run hosted verification suite
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npx tsx scripts/verify-hosted.ts
+
+  # ── Job 2: Full 62-test suite (local PostgreSQL, no Supabase) ────────────────
+  unit-tests:
+    name: Unit & Security Tests (62)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpw
+          POSTGRES_DB: fuelpulse_test
+        options: >
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create roles required by migration and tests
+        env:
+          PGPASSWORD: testpw
+        run: |
+          PSQL="psql -h localhost -U postgres -d fuelpulse_test"
+          for role in anon authenticated service_role authenticator fuelpulse_test_runtime; do
+            $PSQL -c "CREATE ROLE \"$role\" NOLOGIN NOBYPASSRLS;" 2>/dev/null || true
+          done
+          $PSQL -c "ALTER ROLE service_role BYPASSRLS;" 2>/dev/null || true
+          # migration-test-owner: migration 18 creates this role without a password, but
+          # the test immediately connects as it using the URL password 'testpw'.
+          # Pre-create with that password so scram-sha-256 auth succeeds.
+          # The test's IF-NOT-EXISTS guard skips re-creation.
+          psql -h localhost -U postgres -d postgres \
+            -c "CREATE ROLE \"migration-test-owner\" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD 'testpw';" \
+            2>/dev/null || true
+
+      - name: Apply FuelPulse migration to local test database
+        env:
+          MIGRATION_DATABASE_URL: postgresql://postgres:testpw@localhost:5432/fuelpulse_test
+          FUELPULSE_PRIVATE_METADATA_CONFIRMED: 'true'
+        run: npx tsx scripts/migrate.ts
+
+      - name: Enable login for fuelpulse_app (pool role switching)
+        env:
+          PGPASSWORD: testpw
+        run: |
+          psql -h localhost -U postgres -d fuelpulse_test \
+            -c "ALTER ROLE fuelpulse_app LOGIN PASSWORD 'apppw';"
+
+      - name: "Run application tests (tests 01-31: security, password, assist)"
+        env:
+          TEST_ADMIN_DATABASE_URL: postgresql://postgres:testpw@localhost:5432/fuelpulse_test
+          DATABASE_URL: postgresql://postgres:testpw@localhost:5432/fuelpulse_test
+          CREDENTIAL_KEY: ci-test-key-0000000000000000000000
+          NODE_ENV: test
+        run: |
+          node --import tsx/esm --test \
+            tests/security.test.ts \
+            tests/password.test.ts \
+            tests/assist.test.ts
+
+      - name: "Run migration runner tests (tests 01-31: 31 migration cases)"
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:testpw@localhost:5432/postgres
+          MIGRATION_TEST_ALLOW_DATABASE_CREATION: 'true'
+        run: npm run test:migrations
+
+  # ── Job 3: TypeScript, ESLint, Vite Build ────────────────────────────────────
+  build:
+    name: TypeScript · ESLint · Vite Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npx eslint .
+
+      - name: Vite production build
+        run: npx vite build --mode production
+
+      - name: Compile server TypeScript
+        run: npx tsc -p tsconfig.server.json
+
+      - name: Generate PWA and static assets
+        run: npx tsx scripts/assets.ts
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuelpulse-dist
+          path: |
+            dist/
+            build/
+          retention-days: 3
+
+  # ── Job 4: Browser E2E + PWA / Offline Tests ─────────────────────────────────
+  browser-e2e:
+    name: Browser E2E & PWA (Playwright)
+    runs-on: ubuntu-latest
+    needs: [build]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: qapw
+          POSTGRES_DB: fuelpulse_qa
+        options: >
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fuelpulse-dist
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Create QA roles and apply migration
+        env:
+          PGPASSWORD: qapw
+        run: |
+          PSQL="psql -h localhost -U postgres -d fuelpulse_qa"
+          for role in anon authenticated service_role authenticator fuelpulse_test_runtime; do
+            $PSQL -c "CREATE ROLE \"$role\" NOLOGIN NOBYPASSRLS;" 2>/dev/null || true
+          done
+          $PSQL -c "ALTER ROLE service_role BYPASSRLS;" 2>/dev/null || true
+
+      - name: Apply migration to QA database
+        env:
+          MIGRATION_DATABASE_URL: postgresql://postgres:qapw@localhost:5432/fuelpulse_qa
+          FUELPULSE_PRIVATE_METADATA_CONFIRMED: 'true'
+        run: npx tsx scripts/migrate.ts
+
+      - name: Bootstrap QA organisation and staff
+        env:
+          MIGRATION_DATABASE_URL: postgresql://postgres:qapw@localhost:5432/fuelpulse_qa
+          BOOTSTRAP_STATION: local-qa
+          BOOTSTRAP_NAME: QA Station
+          BOOTSTRAP_CODE: OWNER
+          BOOTSTRAP_PASSWORD: ${{ secrets.QA_PASSWORD }}
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Seed QA roles, pump and fuel
+        env:
+          PGPASSWORD: qapw
+        run: |
+          psql -h localhost -U postgres -d fuelpulse_qa << 'SQL'
+          DO $$
+          DECLARE
+            org_id  uuid;
+            pump_id uuid;
+            fuel_id uuid;
+            owner_hash text;
+          BEGIN
+            SELECT id INTO org_id FROM app.organizations WHERE slug = 'local-qa';
+            SELECT password_hash INTO owner_hash
+              FROM app.credentials c JOIN app.users u ON u.id=c.user_id
+             WHERE u.organization_id = org_id AND u.code = 'OWNER';
+            INSERT INTO app.users(organization_id, name, code, role)
+            VALUES (org_id, 'QA Manager',  'MANAGER',  'MANAGER'),
+                   (org_id, 'QA Employee', 'EMPLOYEE', 'EMPLOYEE');
+            INSERT INTO app.credentials(user_id, password_hash)
+              SELECT id, owner_hash FROM app.users
+               WHERE organization_id = org_id AND code IN ('MANAGER','EMPLOYEE');
+            INSERT INTO app.pumps(organization_id, name)
+            VALUES (org_id, 'Pump 01') RETURNING id INTO pump_id;
+            INSERT INTO app.fuels(organization_id, name, price_paise)
+            VALUES (org_id, 'Petrol', 10000) RETURNING id INTO fuel_id;
+            INSERT INTO app.pump_fuels VALUES (org_id, pump_id, fuel_id);
+          END $$;
+          SQL
+
+      - name: Install Python Pillow for OCR plate fixture
+        run: pip install pillow==10.4.0
+
+      - name: Generate plate fixture for OCR test
+        run: |
+          sudo mkdir -p /data
+          sudo chmod 777 /data
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          import os
+          img = Image.new('RGB', (520, 140), color=(255, 255, 200))
+          draw = ImageDraw.Draw(img)
+          draw.rectangle([4, 4, 515, 135], outline='black', width=4)
+          try:
+              font = ImageFont.truetype('/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf', 72)
+          except:
+              font = ImageFont.load_default()
+          draw.text((260, 70), 'MH12AB1234', fill='black', font=font, anchor='mm')
+          img.save('/data/plate-fixture.png')
+          print('Plate fixture saved to /data/plate-fixture.png')
+          PY
+
+      - name: Start application server
+        env:
+          DATABASE_URL: postgresql://postgres:qapw@localhost:5432/fuelpulse_qa
+          CREDENTIAL_KEY: ci-qa-credential-key-000000000000
+          PORT: '3000'
+          APP_ORIGIN: http://localhost:3000
+          NODE_ENV: development
+        run: |
+          node --env-file-if-exists=.env build/server/index.js &
+          echo $! > /tmp/server.pid
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:3000/api/health || { echo 'Server failed to start'; exit 1; }
+
+      - name: Run browser E2E and PWA tests
+        env:
+          APP_ORIGIN: http://localhost:3000
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_STATION: local-qa
+          CHROMIUM_PATH: ''
+        run: |
+          export CHROMIUM_PATH=$(node -e "const {chromium}=require('playwright');console.log(chromium.executablePath())")
+          npx tsx scripts/browser-test.ts
+
+      - name: Upload browser test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa-results
+          path: /data/fuelpulse-qa/
+          retention-days: 7
+
+      - name: Stop server
+        if: always()
+        run: kill $(cat /tmp/server.pid) 2>/dev/null || true
+
+  # ── Final gate ──────────────────────────────────────────────────────
+  all-clear:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    needs: [hosted-verify, unit-tests, build, browser-e2e]
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ needs.hosted-verify.result }}" != "success" ]]; then
+            echo "FAIL: hosted-verify = ${{ needs.hosted-verify.result }}"; exit 1
+          fi
+          if [[ "${{ needs.unit-tests.result }}" != "success" ]]; then
+            echo "FAIL: unit-tests = ${{ needs.unit-tests.result }}"; exit 1
+          fi
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "FAIL: build = ${{ needs.build.result }}"; exit 1
+          fi
+          if [[ "${{ needs.browser-e2e.result }}" != "success" ]]; then
+            echo "FAIL: browser-e2e = ${{ needs.browser-e2e.result }}"; exit 1
+          fi
+          echo "All 4 jobs passed — FuelPulse is production ready."
