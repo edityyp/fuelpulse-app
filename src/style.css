@@ -25,7 +25,7 @@
 }
 
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+body{margin:0;background:linear-gradient(180deg,#f7faff 0%,var(--bg) 38%,#eef3fb 100%);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
 
 /* ===== Base controls ===== */
 button,input,select{font:inherit}
@@ -103,6 +103,8 @@ h3{font-size:18px}
 .role-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:#b9cdf3}
 .role-card:active{transform:translateY(-1px) scale(.99)}
 .role-card span{display:grid;gap:2px}
+.role-card .role-arrow{display:block;margin-left:auto;color:var(--brand);font-size:22px;opacity:.45;transition:transform .2s var(--ease),opacity .2s var(--ease)}
+.role-card:hover .role-arrow{transform:translateX(4px);opacity:1}
 .role-card strong{display:block}
 .role-card small{display:block;color:var(--ink-soft);font-weight:600;font-size:12px}
 .role-ico{
@@ -120,9 +122,12 @@ aside{
 .navlabel{margin:36px 8px 16px;font-size:11px}
 nav{display:grid;gap:4px}
 nav button{
-  text-align:left;border:0;font-size:14px;background:transparent;padding:12px;box-shadow:none;
+  display:flex;align-items:center;gap:12px;text-align:left;border:0;font-size:14px;background:transparent;padding:12px;box-shadow:none;
   position:relative;color:var(--ink);
 }
+.nav-icon{display:grid;place-items:center;color:var(--ink-soft);width:20px}
+.nav-icon svg{width:18px;height:18px;stroke-width:2}
+nav button.active .nav-icon{color:var(--brand)}
 nav button:hover{background:#f2f6fd;transform:none;box-shadow:none}
 nav button.active{background:linear-gradient(135deg,#eaf1ff,#e3edff);color:#154cad;font-weight:700}
 nav button.active:before{
@@ -174,13 +179,6 @@ main{padding:36px 40px;max-width:1500px;margin:auto}
 .stats article:nth-child(4):before{background:linear-gradient(180deg,#7c4dff,#b39ddb)}
 .stats article:nth-child(5):before{background:linear-gradient(180deg,#00acc1,#4dd0e1)}
 .stats article:nth-child(6):before{background:linear-gradient(180deg,#f44336,#ef9a9a)}
-.stats article:nth-child(1) span:after{content:"💰"}
-.stats article:nth-child(2) span:after{content:"💵"}
-.stats article:nth-child(3) span:after{content:"📱"}
-.stats article:nth-child(4) span:after{content:"📈"}
-.stats article:nth-child(5) span:after{content:"⛽"}
-.stats article:nth-child(6) span:after{content:"🚩"}
-.stats article span:after{float:right;font-size:15px}
 .stats article:nth-child(2){animation-delay:.05s}
 .stats article:nth-child(3){animation-delay:.1s}
 .stats article:nth-child(4){animation-delay:.15s}
