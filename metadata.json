@@ -1,0 +1,6 @@
+{
+  "name": "FuelPulse",
+  "description": "FuelPulse — Smart Fuel Management & Forecourt Rewards. AI vehicle plate recognition, forecourt telemetry, and instant customer loyalty rewards.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

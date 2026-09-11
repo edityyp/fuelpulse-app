@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 
 interface FormState {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface FormMeta {
@@ -9,12 +9,21 @@ interface FormMeta {
   errors: { [key: string]: string };
 }
 
+interface ChangeEventPayload {
+  target: {
+    name: string;
+    value: unknown;
+    type?: string;
+    checked?: boolean;
+  };
+}
+
 interface UseFormReturn {
   values: FormState;
   meta: FormMeta;
-  handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: any }>) => void;
+  handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | ChangeEventPayload) => void;
   handleBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
-  setFieldValue: (field: string, value: any) => void;
+  setFieldValue: (field: string, value: unknown) => void;
   setFieldError: (field: string, error: string) => void;
   resetForm: () => void;
 }
@@ -31,11 +40,13 @@ export const useForm = (
   });
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | { name?: string; value: any }>) => {
-      const { name, value, type } = e.target as any;
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | ChangeEventPayload) => {
+      const target = e.target;
+      const { name, value, type } = target;
+      const checked = 'checked' in target ? target.checked : undefined;
       setValues((prev) => ({
         ...prev,
-        [name]: type === 'checkbox' ? (e.target as any).checked : value,
+        [name]: type === 'checkbox' ? checked : value,
       }));
     },
     []
@@ -49,7 +60,7 @@ export const useForm = (
     }));
   }, []);
 
-  const setFieldValue = useCallback((field: string, value: any) => {
+  const setFieldValue = useCallback((field: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [field]: value }));
   }, []);
 

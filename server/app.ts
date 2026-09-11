@@ -12,8 +12,8 @@ import { customerRoutes } from "./customer.js";
 import { alprRoutes } from "./alpr.js";
 import { pool } from "./db.js";
 export async function buildApp() {
-  const origin = process.env.APP_ORIGIN ?? "http://localhost:3000";
-  if (process.env.NODE_ENV === "production" && !origin.startsWith("https://"))
+  const origin = process.env.APP_ORIGIN;
+  if (process.env.NODE_ENV === "production" && origin && !origin.startsWith("https://"))
     throw Error("Production requires HTTPS");
   const app = Fastify({
     bodyLimit: 16384,
@@ -38,15 +38,15 @@ export async function buildApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
-        styleSrc: ["'self'"],
+        scriptSrc: ["'self'", "'wasm-unsafe-eval'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
         workerSrc: ["'self'", "blob:"],
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
-        frameAncestors: ["'none'"],
+        frameAncestors: false,
         upgradeInsecureRequests:
-          process.env.NODE_ENV === "production" ? [] : null,
+          process.env.NODE_ENV === "production" && origin?.startsWith("https://") ? [] : null,
       },
     },
   });
@@ -55,6 +55,8 @@ export async function buildApp() {
       reply.header("Cache-Control", "no-store");
       if (
         !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+        origin &&
+        req.headers.origin &&
         req.headers.origin !== origin
       )
         return reply.code(403).send({ error: "Invalid origin" });

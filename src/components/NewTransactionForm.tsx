@@ -8,20 +8,19 @@ import {
   TextField,
   Button,
   Box,
-  Typography,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   CircularProgress,
   Alert,
+  SelectChangeEvent,
 } from '@mui/material';
-import { CloudUpload } from '@mui/icons-material';
 
 interface NewTransactionFormProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: Record<string, unknown>) => Promise<void>;
   loading?: boolean;
   error?: string;
 }
@@ -40,6 +39,11 @@ const NewTransactionForm: React.FC<NewTransactionFormProps> = ({
     paymentMode: 'CASH',
     notes: '',
   });
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -114,7 +118,7 @@ const NewTransactionForm: React.FC<NewTransactionFormProps> = ({
               <Select
                 name="pump"
                 value={formData.pump}
-                onChange={handleChange as any}
+                onChange={handleSelectChange}
                 label="Pump Number"
               >
                 <MenuItem value="1">Pump 1</MenuItem>
@@ -137,7 +141,7 @@ const NewTransactionForm: React.FC<NewTransactionFormProps> = ({
               <Select
                 name="paymentMode"
                 value={formData.paymentMode}
-                onChange={handleChange as any}
+                onChange={handleSelectChange}
                 label="Payment Mode"
               >
                 <MenuItem value="CASH">Cash</MenuItem>

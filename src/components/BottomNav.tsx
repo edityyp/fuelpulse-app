@@ -4,7 +4,6 @@ import {
   BottomNavigation,
   BottomNavigationAction,
   Paper,
-  Box,
 } from '@mui/material';
 import {
   Home,

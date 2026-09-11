@@ -15,7 +15,6 @@ import {
 import {
   Menu as MenuIcon,
   Notifications,
-  AccountCircle,
   LogoutOutlined,
   SettingsOutlined,
 } from '@mui/icons-material';

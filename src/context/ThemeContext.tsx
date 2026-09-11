@@ -14,7 +14,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const toggleDarkMode = useCallback(() => {
-    setIsDarkMode((prev: boolean) => {
+    setIsDarkMode((prev) => {
       const newValue = !prev;
       localStorage.setItem('fuelpulse-dark-mode', JSON.stringify(newValue));
       return newValue;

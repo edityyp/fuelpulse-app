@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import {
   Card,
   CardContent,
-  CardHeader,
   Typography,
   Box,
   Grid,

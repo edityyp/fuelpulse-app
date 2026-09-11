@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-  Container,
   Box,
   Fab,
   Snackbar,
@@ -19,18 +18,18 @@ import NewTransactionForm from './NewTransactionForm';
 import AddStaffForm from './AddStaffForm';
 
 interface LayoutProps {
-  user: any;
+  user: { name?: string; role?: string; code?: string } | null;
   currentView: string;
   onViewChange: (view: string) => void;
   onLogout: () => void;
   onSettings: () => void;
-  metrics?: any;
-  transactions?: any[];
+  metrics?: Record<string, unknown>;
+  transactions?: unknown[];
   loading?: boolean;
   notice?: string;
   onNoticeClose?: () => void;
-  onNewTransaction?: (data: any) => Promise<void>;
-  onAddStaff?: (data: any) => Promise<void>;
+  onNewTransaction?: (data: Record<string, unknown>) => Promise<void>;
+  onAddStaff?: (data: Record<string, unknown>) => Promise<void>;
   children?: React.ReactNode;
 }
 
@@ -61,14 +60,14 @@ const Layout: React.FC<LayoutProps> = ({
     ...(user?.role === 'OWNER' ? ['Settings', 'Audit log'] : []),
   ];
 
-  const handleNewTransaction = async (data: any) => {
+  const handleNewTransaction = async (data: Record<string, unknown>) => {
     if (onNewTransaction) {
       await onNewTransaction(data);
       setTransactionFormOpen(false);
     }
   };
 
-  const handleAddStaff = async (data: any) => {
+  const handleAddStaff = async (data: Record<string, unknown>) => {
     if (onAddStaff) {
       await onAddStaff(data);
       setStaffFormOpen(false);

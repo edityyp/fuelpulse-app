@@ -89,6 +89,17 @@ function start() {
     }
   });
 
+  worker.on("error", (err) => {
+    for (const item of pending.values()) {
+      clearTimeout(item.timer);
+      item.reject(
+        Error(`Plate recognition service unavailable: ${err.message}`),
+      );
+    }
+    pending.clear();
+    worker = undefined;
+  });
+
   worker.on("exit", () => {
     for (const item of pending.values()) {
       clearTimeout(item.timer);

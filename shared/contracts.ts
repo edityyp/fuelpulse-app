@@ -8,9 +8,9 @@ export const password = z.string().min(12).max(128);
 export const paymentMethod = z.enum(["CASH", "UPI"]);
 export const transaction = z
   .object({
-    idempotency_key: z.uuid(),
-    pump_id: z.uuid(),
-    fuel_id: z.uuid(),
+    idempotency_key: z.string().uuid(),
+    pump_id: z.string().uuid(),
+    fuel_id: z.string().uuid(),
     plate,
     payment_method: paymentMethod.default("CASH"),
     quantity_ml: z.number().int().min(100).max(2000000).optional(),

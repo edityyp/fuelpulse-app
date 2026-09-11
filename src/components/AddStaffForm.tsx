@@ -8,7 +8,6 @@ import {
   TextField,
   Button,
   Box,
-  Typography,
   FormControl,
   InputLabel,
   Select,
@@ -17,13 +16,14 @@ import {
   Alert,
   FormControlLabel,
   Checkbox,
+  SelectChangeEvent,
 } from '@mui/material';
 import { PersonAdd } from '@mui/icons-material';
 
 interface AddStaffFormProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => Promise<void>;
+  onSubmit: (data: Record<string, unknown>) => Promise<void>;
   loading?: boolean;
   error?: string;
 }
@@ -42,6 +42,14 @@ const AddStaffForm: React.FC<AddStaffFormProps> = ({
     role: 'EMPLOYEE',
     active: true,
   });
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -136,7 +144,7 @@ const AddStaffForm: React.FC<AddStaffFormProps> = ({
               <Select
                 name="role"
                 value={formData.role}
-                onChange={handleChange as any}
+                onChange={handleSelectChange}
                 label="Role"
               >
                 <MenuItem value="EMPLOYEE">Employee</MenuItem>
