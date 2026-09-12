@@ -1,0 +1,31 @@
+/* FuelPulse mobile shell: keep the desktop layout intact while making the staff UI fit phones. */
+@media (max-width: 760px){
+  html,body,#root{width:100%;min-width:0;overflow-x:hidden}
+  .app{display:block;min-height:100vh}
+  .app>aside{display:none}
+  .workspace{margin-left:0;width:100%;min-width:0}
+  .workspace>header{height:auto;min-height:60px;padding:12px 16px;gap:10px;font-size:12px}
+  .workspace>header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .workspace>header code{font-size:11px}
+  .workspace>main{padding:20px 14px 32px;max-width:none;width:100%;min-width:0}
+  .heading{align-items:flex-start;flex-direction:column;gap:12px;margin-bottom:16px}
+  .heading h1{font-size:28px;letter-spacing:-.7px;margin-bottom:4px}
+  .heading .primary{width:100%}
+  .syncbar{padding:10px 12px;margin-bottom:16px;font-size:13px}
+  .syncbar button{min-height:40px;padding:8px 10px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+  .stats article,.panel{padding:16px;border-radius:12px}
+  .stats article{padding-left:18px;gap:6px;min-width:0}
+  .stats strong{font-size:22px;overflow-wrap:anywhere}
+  .stats span,.stats small{font-size:12px}
+  .grid,.two{grid-template-columns:1fr;gap:14px}
+  .panel{min-width:0;overflow:hidden}
+  .tablewrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .workspace form{max-width:100%}
+  .workspace input,.workspace select{max-width:100%;min-width:0}
+  .row{gap:10px;align-items:flex-start}
+}
+@media (min-width:761px) and (max-width:1100px){
+  .workspace>main{padding-left:24px;padding-right:24px}
+  .stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
