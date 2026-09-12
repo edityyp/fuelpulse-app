@@ -108,9 +108,14 @@ export async function buildApp() {
     });
   });
   app.get("/api/customer/config", async () => {
-    const row = (await pool.query("select slug,name from app.organizations order by created_at asc limit 1")).rows[0];
-    if (!row) return { station: "", name: "FuelPulse" };
-    return { station: row.slug, name: row.name };
+    const result = await pool.query("select slug,name from app.organizations order by created_at asc");
+    const stations = result.rows.map((row) => ({ station: row.slug as string, name: row.name as string }));
+    const first = stations[0];
+    return {
+      station: first?.station ?? "",
+      name: first?.name ?? "FuelPulse",
+      stations,
+    };
   });
   await authRoutes(app);
   routes(app);
