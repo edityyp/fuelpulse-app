@@ -1,4 +1,5 @@
 import { errorText } from "./api";
+import { ocr } from "./assist";
 
 type AlprResult = {
   plate?: string;
@@ -18,8 +19,10 @@ type ConsensusState = {
 };
 
 const frameConsensus = new WeakMap<HTMLVideoElement, ConsensusState>();
+const liveFallback = new WeakMap<HTMLVideoElement, { until: number }>();
 const CONSENSUS_WINDOW_MS = 7000;
 const MAX_EVIDENCE = 8;
+const FALLBACK_COOLDOWN_MS = 900;
 
 function normalizePlate(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -48,18 +51,13 @@ function compatible(a: string, b: string) {
   if (a === b) return true;
   const shorter = a.length <= b.length ? a : b;
   const longer = a.length <= b.length ? b : a;
-  // A shorter OCR result that is an exact prefix of a longer result is the
-  // most common way a mobile camera drops the final 1–2 characters.
   if (longer.startsWith(shorter) && longer.length - shorter.length <= 3) return true;
-  // Allow one OCR substitution for otherwise equal-length reads. This handles
-  // occasional frame-to-frame confusion without merging unrelated plates.
-  return a.length === b.length && a.length >= 5 && editDistance(a, b) === 1;
+  return a.length === b.length && a.length >= 7 && editDistance(a, b) === 1;
 }
 
 function consensusPlate(video: HTMLVideoElement, raw: string) {
   const plate = normalizePlate(raw);
   if (!plate) return raw;
-
   const now = Date.now();
   let state = frameConsensus.get(video);
   if (!state || now - state.lastAt > CONSENSUS_WINDOW_MS) {
@@ -79,11 +77,7 @@ function consensusPlate(video: HTMLVideoElement, raw: string) {
     match.bestLength = plate.length;
   }
 
-  // Keep only the strongest recent candidates so a noisy camera cannot build
-  // an unbounded in-memory history.
-  state.evidence.sort(
-    (a, b) => b.votes - a.votes || b.bestLength - a.bestLength,
-  );
+  state.evidence.sort((a, b) => b.votes - a.votes || b.bestLength - a.bestLength);
   state.evidence = state.evidence.slice(0, MAX_EVIDENCE);
 
   const best = state.evidence[0];
@@ -96,7 +90,6 @@ function consensusPlate(video: HTMLVideoElement, raw: string) {
     );
     if (clusterVotes >= 2) state.stable = longest;
   }
-
   return state.stable ?? plate;
 }
 
@@ -107,50 +100,62 @@ async function postAlpr(endpoint: string, blob: Blob): Promise<string> {
     headers: { "Content-Type": blob.type || "image/jpeg" },
     body: blob,
   });
-  const body = (await response
-    .json()
-    .catch(() => ({ error: "Plate recognition failed" }))) as AlprResult;
-  if (!response.ok || !body.plate)
-    throw Error(body.error ?? `ALPR failed (${response.status})`);
+  const body = (await response.json().catch(() => ({ error: "Plate recognition failed" }))) as AlprResult;
+  if (!response.ok || !body.plate) throw Error(body.error ?? `ALPR failed (${response.status})`);
   return body.plate;
 }
 
-/** Send a static File to the FastALPR server endpoint and return the normalised plate string. */
 export async function fastAlprPhoto(file: File) {
   if (!file.type.startsWith("image/") || file.size > 4 * 1024 * 1024)
     throw Error("Select a JPEG, PNG, or WebP image under 4 MB");
   return postAlpr("/api/alpr", file);
 }
 
-/**
- * Capture a live frame and pass its reading through a short-lived per-camera
- * consensus. Compatible readings such as AB12CD3 and AB12CD34 are treated as
- * the same plate, with the longer confirmed reading preferred.
- */
+async function captureFrame(video: HTMLVideoElement) {
+  const canvas = document.createElement("canvas");
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw Error("Canvas unavailable");
+  ctx.drawImage(video, 0, 0, width, height);
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(Error("Frame capture failed"))), "image/jpeg", 0.92),
+  );
+  return new File([blob], "live-plate.jpg", { type: "image/jpeg" });
+}
+
+async function browserFallback(video: HTMLVideoElement) {
+  const file = await captureFrame(video);
+  return ocr(file);
+}
+
 export async function fastAlprFrame(
   video: HTMLVideoElement,
   endpoint = "/api/alpr",
 ): Promise<string> {
   if (video.readyState < 2 || video.videoWidth === 0)
     throw Error("Camera not ready — wait for the preview to appear");
-  const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw Error("Canvas unavailable");
-  ctx.drawImage(video, 0, 0);
-  const blob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(Error("Frame capture failed"))),
-      "image/jpeg",
-      0.9,
-    ),
-  );
-  const result = await postAlpr(endpoint, blob);
-  return consensusPlate(video, result);
+
+  const fallback = liveFallback.get(video);
+  if (fallback && Date.now() < fallback.until) return browserFallback(video);
+
+  try {
+    const file = await captureFrame(video);
+    const result = await postAlpr(endpoint, file);
+    return consensusPlate(video, result);
+  } catch (primary) {
+    liveFallback.set(video, { until: Date.now() + FALLBACK_COOLDOWN_MS });
+    try {
+      const result = await browserFallback(video);
+      return consensusPlate(video, result);
+    } catch {
+      throw Error(errorText(primary));
+    }
+  }
 }
 
-/** Try FastALPR first; fall back to local OCR on any error. */
 export async function fastAlprWithFallback(
   file: File,
   fallback: (file: File) => Promise<string>,
@@ -161,9 +166,7 @@ export async function fastAlprWithFallback(
     try {
       return await fallback(file);
     } catch {
-      throw Error(
-        `FastALPR: ${errorText(primary)}. Retake closer without glare, or type the plate manually.`,
-      );
+      throw Error(`FastALPR: ${errorText(primary)}. Retake closer without glare, or type the plate manually.`);
     }
   }
 }
