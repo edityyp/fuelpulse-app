@@ -44,7 +44,7 @@ export async function buildApp() {
         workerSrc: ["'self'", "blob:"],
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
-        frameAncestors: false,
+        frameAncestors: ["'none'"],
         upgradeInsecureRequests:
           process.env.NODE_ENV === "production" && origin?.startsWith("https://") ? [] : null,
       },
