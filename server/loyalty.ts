@@ -1,7 +1,7 @@
 import type {FastifyInstance} from "fastify";
 import {z} from "zod";
 import {actor,limit} from "./auth.js";
-import {audit,fail,manage,tx} from "./db.js";
+import {fail,manage,tx} from "./db.js";
 import {digest} from "./crypto.js";
 import {plate} from "../shared/contracts.js";
 
@@ -25,12 +25,5 @@ export function loyaltyRoutes(app:FastifyInstance){
   app.get("/api/reward-redemptions",async req=>{
     const a=await actor(req);manage(a);
     return tx(async c=>(await c.query(`select r.id,r.plate,r.reward_name,r.quantity_ml,r.redeemed_at,p.name pump_name,u.name employee_name from app.reward_entitlements r left join app.pumps p on p.id=r.pump_id and p.organization_id=r.organization_id left join app.users u on u.id=r.redeemed_by and u.organization_id=r.organization_id where r.organization_id=$1 and r.redeemed_at is not null order by r.redeemed_at desc limit 100`,[a.organization_id])).rows,a);
-  });
-
-  app.post("/api/reward-redemptions/:id/note",async req=>{
-    const a=await actor(req);manage(a);
-    const id=z.object({id:z.string().uuid()}).parse(req.params).id;
-    const b=z.object({note:z.string().trim().max(200)}).strict().parse(req.body);
-    return tx(async c=>{const row=(await c.query(`update app.reward_entitlements set redemption_note=$1 where id=$2 and organization_id=$3 returning id`,[b.note,id,a.organization_id])).rows[0];if(!row)fail(404,"Redemption not found");await audit(c,a,"reward.redemption.note",id);return {ok:true};},a);
   });
 }
