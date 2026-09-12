@@ -11,10 +11,19 @@ import { routes } from "./routes.js";
 import { customerRoutes } from "./customer.js";
 import { alprRoutes } from "./alpr.js";
 import { pool } from "./db.js";
+
 export async function buildApp() {
-  const origin = process.env.APP_ORIGIN;
-  if (process.env.NODE_ENV === "production" && origin && !origin.startsWith("https://"))
+  const configuredOrigins = (process.env.APP_ORIGIN ?? "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    configuredOrigins.some((value) => !value.startsWith("https://"))
+  )
     throw Error("Production requires HTTPS");
+
   const app = Fastify({
     bodyLimit: 16384,
     trustProxy:
@@ -46,20 +55,34 @@ export async function buildApp() {
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
         upgradeInsecureRequests:
-          process.env.NODE_ENV === "production" && origin?.startsWith("https://") ? [] : null,
+          process.env.NODE_ENV === "production" && configuredOrigins.some((value) => value.startsWith("https://"))
+            ? []
+            : null,
       },
     },
   });
   app.addHook("onRequest", async (req, reply) => {
     if (req.url.startsWith("/api/")) {
       reply.header("Cache-Control", "no-store");
-      if (
-        !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-        origin &&
-        req.headers.origin &&
-        req.headers.origin !== origin
-      )
-        return reply.code(403).send({ error: "Invalid origin" });
+      if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers.origin) {
+        const forwardedProto = req.headers["x-forwarded-proto"];
+        const protocol =
+          process.env.NODE_ENV === "production"
+            ? "https"
+            : typeof forwardedProto === "string"
+              ? forwardedProto.split(",")[0].trim()
+              : "http";
+        const requestHostOrigin = req.headers.host
+          ? `${protocol}://${req.headers.host}`
+          : null;
+        const requestOrigin = req.headers.origin.replace(/\/$/, "");
+        const originAllowed =
+          configuredOrigins.includes(requestOrigin) ||
+          requestOrigin === requestHostOrigin;
+
+        if (!originAllowed)
+          return reply.code(403).send({ error: "Invalid origin" });
+      }
     }
   });
   app.setErrorHandler((error, _req, reply) => {
