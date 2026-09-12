@@ -36,6 +36,35 @@ type Result = {
   };
 };
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;",
+  })[character] ?? character);
+}
+
+function downloadReceipt(
+  transaction: Result["history"][number],
+  plate: string,
+  stationName: string,
+) {
+  const date = new Date(transaction.created_at);
+  const receiptNumber = transaction.id.slice(0, 12).toUpperCase();
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FuelPulse Receipt ${escapeHtml(receiptNumber)}</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f4f7fc;margin:0;padding:32px;color:#152033}.receipt{max-width:520px;margin:auto;background:#fff;border:1px solid #dbe3f0;border-radius:20px;padding:28px;box-shadow:0 12px 32px rgba(20,40,80,.08)}h1{margin:0 0 4px;font-size:24px}.muted{color:#64748b}.total{font-size:32px;font-weight:800;margin:22px 0}.row{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #edf1f7}.row:last-child{border-bottom:0}.footer{margin-top:24px;font-size:12px;color:#64748b;text-align:center}@media print{body{background:#fff;padding:0}.receipt{border:0;box-shadow:none}}</style></head><body><main class="receipt"><h1>FuelPulse</h1><div class="muted">${escapeHtml(stationName)}</div><div class="total">${escapeHtml(money(transaction.amount_paise))}</div><div class="row"><span>Receipt</span><strong>${escapeHtml(receiptNumber)}</strong></div><div class="row"><span>Vehicle</span><strong>${escapeHtml(plate)}</strong></div><div class="row"><span>Date</span><strong>${escapeHtml(date.toLocaleString("en-IN"))}</strong></div><div class="row"><span>Fuel volume</span><strong>${escapeHtml((transaction.quantity_ml / 1000).toFixed(3))} L</strong></div><div class="row"><span>Payment</span><strong>${escapeHtml(transaction.payment_method)}</strong></div><div class="row"><span>Loyalty points</span><strong>+${transaction.points}</strong></div><div class="row"><span>Status</span><strong>${transaction.fraud ? "Flagged for review" : "Confirmed"}</strong></div><div class="footer">Digital receipt · Downloaded from FuelPulse</div></main></body></html>`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `FuelPulse_Receipt_${plate.replace(/[^A-Z0-9]/gi, "-")}_${receiptNumber}.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function RewardQr({ reward, plate }: { reward: Entitlement; plate: string }) {
   const [src, setSrc] = useState("");
   useEffect(() => {
@@ -126,7 +155,7 @@ export function CustomerPortal() {
       {result && <div className="customer-summary"><p className="eyebrow">{result.plate}</p><h2>{result.balance} usable points</h2><p className="muted">{result.lifetime_points} lifetime points earned</p>
         {result.reward.available.length > 0 ? <div className="reward-alert" role="alert"><strong>🎉 Loyalty reward unlocked!</strong><p>{result.reward.available.length} single-use reward{result.reward.available.length === 1 ? " is" : "s are"} ready below.</p></div> : <div className="customer-hit"><strong>{result.reward.name}</strong><p>{result.reward.points_to_next} more points to your next {(result.reward.quantity_ml / 1000).toFixed(3)} L free-fuel reward</p><small>One reward for every {result.reward.threshold_points} points</small></div>}
         {result.reward.available.map((reward) => <RewardQr key={reward.id} reward={reward} plate={result.plate} />)}
-        <h2>Past transactions</h2>{result.history.length ? result.history.map((t) => <div className="row" key={t.id}><div><strong>{new Date(t.created_at).toLocaleString("en-IN")}</strong><p className="muted">{t.quantity_ml / 1000} L · {t.payment_method} · {t.fraud ? "Flagged" : "Confirmed"}</p></div><div><strong>{money(t.amount_paise)}</strong><p>+{t.points} points</p></div></div>) : <p className="muted">No transactions found for this vehicle at this station.</p>}
+        <h2>Past transactions</h2>{result.history.length ? result.history.map((t) => <div className="row" key={t.id}><div><strong>{new Date(t.created_at).toLocaleString("en-IN")}</strong><p className="muted">{t.quantity_ml / 1000} L · {t.payment_method} · {t.fraud ? "Flagged" : "Confirmed"}</p></div><div><strong>{money(t.amount_paise)}</strong><p>+{t.points} points</p><button type="button" onClick={() => downloadReceipt(t, result.plate, stationName)}>Download receipt</button></div></div>) : <p className="muted">No transactions found for this vehicle at this station.</p>}
       </div>}
     </>}
     {tab === "OFFERS" && <div className="customer-summary"><h2>Offers</h2><p className="muted">Offers will appear here when your station publishes them.</p><div className="empty"><span>🏷️</span><h3>No offers yet</h3><p>Check back later.</p></div></div>}
