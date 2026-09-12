@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { actor, manage } from "./auth.js";
-import { tx } from "./db.js";
+import { actor } from "./auth.js";
+import { tx, fail } from "./db.js";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const manage = (a: Awaited<ReturnType<typeof actor>>) => {
+  if (a.role !== "OWNER" && a.role !== "MANAGER") fail(403, "Manager access required");
+};
 
 export function phase1Routes(app: FastifyInstance) {
   app.get("/api/phase1/dashboard", async (req) => {
