@@ -12,6 +12,7 @@ import { customerRoutes } from "./customer.js";
 import { alprRoutes } from "./alpr.js";
 import { phase1Routes } from "./phase1.js";
 import { offerRoutes } from "./offers.js";
+import { loyaltyRoutes } from "./loyalty.js";
 import { pool, tx, fail } from "./db.js";
 import { coupon } from "../shared/contracts.js";
 
@@ -26,7 +27,7 @@ export async function buildApp() {
   app.setErrorHandler((error,_req,reply)=>{const e=error as {statusCode?:number;code?:string;message?:string},status=error instanceof ZodError?400:e.code==="23505"?409:["23503","42501","22P02"].includes(e.code??"")?400:(e.statusCode??500);reply.code(status).send({error:status>=500?"Server error; retry safely":status===400?"Invalid request":status===409?"Conflict; request cannot be applied":(e.message??"Request failed")})});
   app.get("/api/customer/config",async()=>{const result=await pool.query("select slug,name from app.organizations order by created_at asc"),stations=result.rows.map(row=>({station:row.slug as string,name:row.name as string})),first=stations[0];return {station:first?.station??"",name:first?.name??"FuelPulse",stations}});
   app.get("/api/coupons/lookup",async(req)=>{const a=await actor(req);const parsed=coupon.safeParse((req.query as {code?:unknown})?.code);if(!parsed.success)fail(400,"Invalid coupon code");return tx(async c=>{const row=(await c.query("select id,plate,expires_at,redeemed_at from app.coupons where organization_id=$1 and code=$2",[a.organization_id,parsed.data])).rows[0];if(!row)fail(404,"Coupon not found");return row;},a);});
-  await authRoutes(app);routes(app);customerRoutes(app);alprRoutes(app);phase1Routes(app);offerRoutes(app);
+  await authRoutes(app);routes(app);customerRoutes(app);alprRoutes(app);phase1Routes(app);offerRoutes(app);loyaltyRoutes(app);
   app.get("/api/health",async()=>{await pool.query("select 1");return {status:"ok"}});
   if(existsSync(resolve("dist"))){await app.register(files,{root:resolve("dist")});app.setNotFoundHandler((req,reply)=>req.url.startsWith("/api/")?reply.code(404).send({error:"Not found"}):reply.sendFile("index.html"))}
   return app;
