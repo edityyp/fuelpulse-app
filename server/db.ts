@@ -1,17 +1,36 @@
 import pg from 'pg';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Actor } from '../shared/contracts.js';
 import { mockDb } from './mockDb.js';
 
-const hasRealDb = Boolean(process.env.DATABASE_URL);
-const realPool = hasRealDb
-  ? new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 20,
-      connectionTimeoutMillis: 5000,
-      statement_timeout: 15000,
-    })
-  : null;
+const databaseUrl = process.env.DATABASE_URL;
+const hasRealDb = Boolean(databaseUrl);
 
+function buildDbConfig() {
+  if (!databaseUrl) return null;
+
+  // Vercel does not apply the Railway Dockerfile's NODE_EXTRA_CA_CERTS setup.
+  // Load the approved Supabase CA directly so node-postgres can verify the
+  // session-pooler certificate without weakening TLS verification.
+  const connection = new URL(databaseUrl);
+  connection.searchParams.delete('sslmode');
+  connection.searchParams.delete('sslcert');
+  connection.searchParams.delete('sslkey');
+  connection.searchParams.delete('sslrootcert');
+
+  const ca = readFileSync(resolve(process.cwd(), 'certs/supabase-root-2021-ca.crt'), 'utf8');
+
+  return {
+    connectionString: connection.toString(),
+    ssl: { ca, rejectUnauthorized: true },
+    max: 20,
+    connectionTimeoutMillis: 5000,
+    statement_timeout: 15000,
+  };
+}
+
+const realPool = hasRealDb ? new pg.Pool(buildDbConfig()!) : null;
 let useMock = !hasRealDb;
 
 const mockClient = {
