@@ -10,6 +10,7 @@ import { authRoutes } from "./auth.js";
 import { routes } from "./routes.js";
 import { customerRoutes } from "./customer.js";
 import { alprRoutes } from "./alpr.js";
+import { phase1Routes } from "./phase1.js";
 import { pool } from "./db.js";
 
 export async function buildApp() {
@@ -110,6 +111,7 @@ export async function buildApp() {
   routes(app);
   customerRoutes(app);
   alprRoutes(app);
+  phase1Routes(app);
   app.get("/api/health", async () => {
     await pool.query("select 1");
     return { status: "ok" };
