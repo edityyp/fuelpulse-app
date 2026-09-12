@@ -22,7 +22,9 @@ const frameConsensus = new WeakMap<HTMLVideoElement, ConsensusState>();
 const liveFallback = new WeakMap<HTMLVideoElement, { until: number }>();
 const CONSENSUS_WINDOW_MS = 7000;
 const MAX_EVIDENCE = 8;
-const FALLBACK_COOLDOWN_MS = 900;
+// Vercel cannot run the Python FastALPR worker, so browser OCR is a
+// compatibility fallback. Throttle it to avoid creating OCR work on every frame.
+const FALLBACK_COOLDOWN_MS = 2500;
 
 function normalizePlate(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
