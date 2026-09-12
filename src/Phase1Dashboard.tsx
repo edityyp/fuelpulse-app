@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Download, ShieldAlert, Sparkles, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, BarChart3, Download, ShieldAlert, Sparkles, TrendingUp, Users, BrainCircuit } from "lucide-react";
 import { api, money, errorText } from "./api";
 import "./phase1.css";
 
@@ -10,74 +10,25 @@ type Dashboard = {
   staff: { id: string; name: string; code: string; role: string; transactions: number; revenue: string; volume: string; fraud: number; average: string }[];
   alerts: { level: "critical" | "warning" | "info"; title: string; detail: string }[];
 };
-
 type ReportRow = { created_at: string; plate: string; fuel: string; pump: string; quantity_ml: number; price_paise: number; amount_paise: string; payment_method: string; points: number; fraud: boolean; employee: string | null };
-
+type Insights = { insights: { kind: "sales" | "fraud" | "attention"; title: string; detail: string; severity: "high" | "medium" | "low" }[]; metrics: { week_revenue: string; previous_week_revenue: string; week_fraud: number; week_transactions: number }; top_vehicles: { plate: string; tx: number; revenue: string; fraud: number }[] };
 const n = (v: string | number) => Number(v || 0);
 const pct = (v: number, max: number) => `${max ? Math.max(6, Math.round((v / max) * 100)) : 6}%`;
-
-function csv(rows: ReportRow[]) {
-  const headers = ["Date", "Vehicle", "Fuel", "Pump", "Litres", "Price/L", "Amount", "Payment", "Points", "Fraud", "Employee"];
-  const body = rows.map(r => [new Date(r.created_at).toLocaleString("en-IN"), r.plate, r.fuel, r.pump, (r.quantity_ml / 1000).toFixed(3), (r.price_paise / 100).toFixed(2), (Number(r.amount_paise) / 100).toFixed(2), r.payment_method, r.points, r.fraud ? "YES" : "NO", r.employee ?? ""].map(v => `"${String(v).replaceAll('"', '""')}"`).join(","));
-  return [headers.join(","), ...body].join("\n");
-}
+function csv(rows: ReportRow[]) { const headers = ["Date","Vehicle","Fuel","Pump","Litres","Price/L","Amount","Payment","Points","Fraud","Employee"]; const body = rows.map(r => [new Date(r.created_at).toLocaleString("en-IN"),r.plate,r.fuel,r.pump,(r.quantity_ml/1000).toFixed(3),(r.price_paise/100).toFixed(2),(Number(r.amount_paise)/100).toFixed(2),r.payment_method,r.points,r.fraud?"YES":"NO",r.employee??""].map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")); return [headers.join(","),...body].join("\n"); }
 
 export function Phase1Dashboard({ notify }: { notify: (message: string) => void }) {
-  const [data, setData] = useState<Dashboard | null>(null);
-  const [busy, setBusy] = useState(true);
-  const [exporting, setExporting] = useState(false);
-
-  const load = async () => {
-    setBusy(true);
-    try { setData(await api<Dashboard>("/phase1/dashboard")); }
-    catch (e) { notify(errorText(e)); }
-    finally { setBusy(false); }
-  };
-  useEffect(() => { void load(); }, []);
-
-  const fuelMax = useMemo(() => Math.max(...(data?.fuel ?? []).map(x => Number(x.revenue)), 1), [data]);
-  const staffMax = useMemo(() => Math.max(...(data?.staff ?? []).map(x => Number(x.revenue)), 1), [data]);
-
-  const exportReport = async () => {
-    setExporting(true);
-    try {
-      const rows = await api<ReportRow[]>("/phase1/report");
-      const blob = new Blob([csv(rows)], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `FuelPulse_Report_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      notify(`${rows.length} transactions exported.`);
-    } catch (e) { notify(errorText(e)); }
-    finally { setExporting(false); }
-  };
-
-  if (busy && !data) return <section className="phase1-loading"><div className="phase1-spinner"/><span>Loading live station intelligence…</span></section>;
-  if (!data) return null;
-
+  const [data,setData]=useState<Dashboard|null>(null),[insights,setInsights]=useState<Insights|null>(null),[busy,setBusy]=useState(true),[exporting,setExporting]=useState(false);
+  const load=async()=>{setBusy(true);try{const [d,i]=await Promise.all([api<Dashboard>("/phase1/dashboard"),api<Insights>("/phase2/insights")]);setData(d);setInsights(i);}catch(e){notify(errorText(e));}finally{setBusy(false);}};
+  useEffect(()=>{void load();},[]);
+  const fuelMax=useMemo(()=>Math.max(...(data?.fuel??[]).map(x=>Number(x.revenue)),1),[data]); const staffMax=useMemo(()=>Math.max(...(data?.staff??[]).map(x=>Number(x.revenue)),1),[data]);
+  const exportReport=async()=>{setExporting(true);try{const rows=await api<ReportRow[]>("/phase1/report");const blob=new Blob([csv(rows)],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`FuelPulse_Report_${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);notify(`${rows.length} transactions exported.`);}catch(e){notify(errorText(e));}finally{setExporting(false);}};
+  if(busy&&!data)return <section className="phase1-loading"><div className="phase1-spinner"/><span>Loading live station intelligence…</span></section>; if(!data)return null;
   return <section className="phase1">
-    <div className="phase1-head">
-      <div><div className="phase1-kicker"><Sparkles/> LIVE STATION INTELLIGENCE</div><h2>Advanced dashboard</h2><p className="muted">A practical view of revenue, volume, staff performance and exceptions.</p></div>
-      <div className="phase1-actions"><button type="button" onClick={exportReport} disabled={exporting}><Download/> {exporting ? "Preparing…" : "Export report"}</button><button type="button" onClick={() => void load()} disabled={busy}><BarChart3/> Refresh</button></div>
-    </div>
-
-    <div className="phase1-kpis">
-      <article><span>Today</span><strong>{money(data.summary.today_revenue)}</strong><small>{data.summary.today_transactions} transactions</small></article>
-      <article><span>7-day revenue</span><strong>{money(data.summary.week_revenue)}</strong><small>{(n(data.summary.today_volume) / 1000).toFixed(1)} L sold today</small></article>
-      <article><span>30-day revenue</span><strong>{money(data.summary.month_revenue)}</strong><small>Average today {money(data.summary.today_average)}</small></article>
-      <article className={data.summary.today_fraud ? "danger" : "ok"}><span>Fraud flags</span><strong>{data.summary.today_fraud}</strong><small>{data.summary.today_fraud ? "Needs review" : "No flags today"}</small></article>
-    </div>
-
-    <div className="phase1-grid">
-      <section className="phase1-card"><div className="phase1-title"><div><span>FUEL MIX</span><h3>What is selling</h3></div><TrendingUp/></div>{data.fuel.length ? data.fuel.map(f => <div className="phase1-bar-row" key={f.name}><div><strong>{f.name}</strong><small>{f.transactions} tx · {(n(f.volume)/1000).toFixed(1)} L</small></div><b>{money(f.revenue)}</b><i><em style={{width:pct(n(f.revenue),fuelMax)}}/></i></div>) : <div className="phase1-empty">No fuel sales in the selected period.</div>}</section>
-      <section className="phase1-card"><div className="phase1-title"><div><span>PUMP PERFORMANCE</span><h3>Station activity</h3></div><BarChart3/></div>{data.pumps.map(p => <div className="phase1-pump" key={p.name}><div><strong>{p.name}</strong><small>{p.transactions} transactions · {p.fraud} fraud</small></div><b>{money(p.revenue)}</b></div>)}{!data.pumps.length && <div className="phase1-empty">No pumps configured.</div>}</section>
-    </div>
-
-    <div className="phase1-grid phase1-grid-bottom">
-      <section className="phase1-card"><div className="phase1-title"><div><span>STAFF PERFORMANCE · 7 DAYS</span><h3>Team leaderboard</h3></div><Users/></div>{data.staff.map(s => <div className="phase1-staff" key={s.id}><div className="staff-avatar">{s.name.slice(0,1).toUpperCase()}</div><div className="staff-main"><strong>{s.name}</strong><small>{s.role} · {s.transactions} tx · {s.fraud} fraud</small><i><em style={{width:pct(n(s.revenue),staffMax)}}/></i></div><div className="staff-value"><strong>{money(s.revenue)}</strong><small>avg {money(s.average)}</small></div></div>)}{!data.staff.length && <div className="phase1-empty">No staff activity yet.</div>}</section>
-      <section className="phase1-card"><div className="phase1-title"><div><span>SMART ALERTS</span><h3>What needs attention</h3></div><ShieldAlert/></div><div className="phase1-alerts">{data.alerts.map((a,i) => <article className={a.level} key={`${a.title}-${i}`}><span>{a.level === "critical" ? <ShieldAlert/> : a.level === "warning" ? <AlertTriangle/> : <TrendingUp/>}</span><div><strong>{a.title}</strong><p>{a.detail}</p></div></article>)}</div></section>
-    </div>
-
-    <div className="phase1-footer"><span><Sparkles/> Phase 1 analytics are server-calculated and tenant-scoped.</span><button type="button" onClick={exportReport}><Download/> Download CSV report</button></div>
+    <div className="phase1-head"><div><div className="phase1-kicker"><Sparkles/> LIVE STATION INTELLIGENCE</div><h2>Advanced dashboard</h2><p className="muted">Revenue, volume, staff performance, exceptions and explainable AI insights.</p></div><div className="phase1-actions"><button type="button" onClick={exportReport} disabled={exporting}><Download/> {exporting?"Preparing…":"Export report"}</button><button type="button" onClick={()=>void load()} disabled={busy}><BarChart3/> Refresh</button></div></div>
+    <div className="phase1-kpis"><article><span>Today</span><strong>{money(data.summary.today_revenue)}</strong><small>{data.summary.today_transactions} transactions</small></article><article><span>7-day revenue</span><strong>{money(data.summary.week_revenue)}</strong><small>{(n(data.summary.today_volume)/1000).toFixed(1)} L sold today</small></article><article><span>30-day revenue</span><strong>{money(data.summary.month_revenue)}</strong><small>Average today {money(data.summary.today_average)}</small></article><article className={data.summary.today_fraud?"danger":"ok"}><span>Fraud flags</span><strong>{data.summary.today_fraud}</strong><small>{data.summary.today_fraud?"Needs review":"No flags today"}</small></article></div>
+    {insights&&<section className="phase1-card phase2-insights"><div className="phase1-title"><div><span>PHASE 2 · INTELLIGENCE</span><h3>AI sales & fraud analysis</h3></div><BrainCircuit/></div><div className="phase2-insight-grid">{insights.insights.map((i,index)=><article className={`phase2-insight ${i.severity}`} key={`${i.title}-${index}`}><div className="phase2-insight-icon">{i.kind==="fraud"?<ShieldAlert/>:i.kind==="sales"?<TrendingUp/>:<Sparkles/>}</div><div><strong>{i.title}</strong><p>{i.detail}</p></div></article>)}</div><div className="phase2-meta"><span>7-day revenue {money(insights.metrics.week_revenue)}</span><span>Previous 7 days {money(insights.metrics.previous_week_revenue)}</span><span>{insights.metrics.week_fraud} fraud / {insights.metrics.week_transactions} transactions</span></div></section>}
+    <div className="phase1-grid"><section className="phase1-card"><div className="phase1-title"><div><span>FUEL MIX</span><h3>What is selling</h3></div><TrendingUp/></div>{data.fuel.length?data.fuel.map(f=><div className="phase1-bar-row" key={f.name}><div><strong>{f.name}</strong><small>{f.transactions} tx · {(n(f.volume)/1000).toFixed(1)} L</small></div><b>{money(f.revenue)}</b><i><em style={{width:pct(n(f.revenue),fuelMax)}}/></i></div>):<div className="phase1-empty">No fuel sales in the selected period.</div>}</section><section className="phase1-card"><div className="phase1-title"><div><span>PUMP PERFORMANCE</span><h3>Station activity</h3></div><BarChart3/></div>{data.pumps.map(p=><div className="phase1-pump" key={p.name}><div><strong>{p.name}</strong><small>{p.transactions} transactions · {p.fraud} fraud</small></div><b>{money(p.revenue)}</b></div>)}{!data.pumps.length&&<div className="phase1-empty">No pumps configured.</div>}</section></div>
+    <div className="phase1-grid phase1-grid-bottom"><section className="phase1-card"><div className="phase1-title"><div><span>STAFF PERFORMANCE · 7 DAYS</span><h3>Team leaderboard</h3></div><Users/></div>{data.staff.map(s=><div className="phase1-staff" key={s.id}><div className="staff-avatar">{s.name.slice(0,1).toUpperCase()}</div><div className="staff-main"><strong>{s.name}</strong><small>{s.role} · {s.transactions} tx · {s.fraud} fraud</small><i><em style={{width:pct(n(s.revenue),staffMax)}}/></i></div><div className="staff-value"><strong>{money(s.revenue)}</strong><small>avg {money(s.average)}</small></div></div>)}{!data.staff.length&&<div className="phase1-empty">No staff activity yet.</div>}</section><section className="phase1-card"><div className="phase1-title"><div><span>SMART ALERTS</span><h3>What needs attention</h3></div><ShieldAlert/></div><div className="phase1-alerts">{data.alerts.map((a,i)=><article className={a.level} key={`${a.title}-${i}`}><span>{a.level==="critical"?<ShieldAlert/>:a.level==="warning"?<AlertTriangle/>:<TrendingUp/>}</span><div><strong>{a.title}</strong><p>{a.detail}</p></div></article>)}</div></section></div>
+    <div className="phase1-footer"><span><Sparkles/> Analytics are server-calculated and tenant-scoped.</span><button type="button" onClick={exportReport}><Download/> Download CSV report</button></div>
   </section>;
 }
