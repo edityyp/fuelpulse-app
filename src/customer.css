@@ -26,6 +26,28 @@
 .reward-qr code{display:block;overflow-wrap:anywhere;font-size:.7rem}
 .reward-staff{margin:1rem 0;padding:1rem;border:2px solid #43d17d;border-radius:12px;background:#f2fff7}
 .reward-staff input{min-width:14rem}
-
-@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.camera-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.plate-camera{width:100%;overflow:hidden;border-radius:16px;background:#08111f;border:1px solid #c9d5e8;box-shadow:0 10px 26px rgba(20,44,83,.12);margin:10px 0 14px;position:relative;aspect-ratio:16/9}
+.plate-camera video{display:block;width:100%;height:100%;object-fit:cover;background:#08111f}
+.plate-guide{position:absolute;inset:18% 10%;border:2px solid rgba(255,255,255,.75);border-radius:12px;display:grid;place-items:end center;pointer-events:none;box-shadow:0 0 0 999px rgba(0,0,0,.18)}
+.plate-guide span{margin-bottom:-14px;padding:5px 9px;border-radius:999px;background:rgba(8,17,31,.82);color:#fff;font-size:10px;font-weight:800;letter-spacing:1px}
+.scan-status{position:absolute;left:10px;right:10px;bottom:10px;display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:10px;background:rgba(8,17,31,.82);color:#fff;font-size:12px;font-weight:700;backdrop-filter:blur(8px)}
+.scan-status i{width:8px;height:8px;border-radius:50%;background:#62d98d;box-shadow:0 0 0 4px rgba(98,217,141,.15);animation:pulseDot 1.4s ease-in-out infinite}
+@keyframes pulseDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.72);opacity:.6}}
+.empty{text-align:center;padding:48px 20px}
+@media(max-width:640px){
+  .customer-page{padding:16px 10px calc(24px + env(safe-area-inset-bottom))}
+  .customer-card{border-radius:16px;padding:18px!important}
+  .customer-card .brand{margin-bottom:24px}
+  .customer-card h1{font-size:28px;line-height:1.12}
+  .mode-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mode-actions button{min-height:42px;padding:8px 5px;font-size:12px}
+  .camera-actions button{width:100%}
+  .plate-camera{aspect-ratio:4/3;border-radius:14px}
+  .plate-guide{inset:23% 7%}
+  .plate-guide span{font-size:9px}
+  .reward-qr{padding:14px}
+  .reward-qr img{width:min(220px,100%)}
+  .row{align-items:flex-start}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important}}
