@@ -107,6 +107,11 @@ export async function buildApp() {
               : (e.message ?? "Request failed"),
     });
   });
+  app.get("/api/customer/config", async () => {
+    const row = (await pool.query("select slug,name from app.organizations order by created_at asc limit 1")).rows[0];
+    if (!row) return { station: "", name: "FuelPulse" };
+    return { station: row.slug, name: row.name };
+  });
   await authRoutes(app);
   routes(app);
   customerRoutes(app);
