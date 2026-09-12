@@ -1,16 +1,22 @@
 import { errorText } from "./api";
-import { ocr } from "./assist";
+import { ocr, plateCandidates } from "./assist";
 
 type AlprResult = { plate?: string; error?: string };
 type PlateEvidence = { plate: string; votes: number; bestLength: number };
 type ConsensusState = { evidence: PlateEvidence[]; lastAt: number; stable?: string };
 type FallbackState = { until: number; lastResult?: string };
+type LiveOcrWorker = {
+  setParameters: (params: Record<string, string>) => Promise<void>;
+  recognize: (image: HTMLCanvasElement) => Promise<{ data: { text: string; confidence: number } }>;
+  terminate: () => Promise<void>;
+};
 
 const frameConsensus = new WeakMap<HTMLVideoElement, ConsensusState>();
 const liveFallback = new WeakMap<HTMLVideoElement, FallbackState>();
+const liveOcrWorkers = new WeakMap<HTMLVideoElement, Promise<LiveOcrWorker>>();
 const CONSENSUS_WINDOW_MS = 7000;
 const MAX_EVIDENCE = 8;
-const FALLBACK_COOLDOWN_MS = 2500;
+const FALLBACK_COOLDOWN_MS = 1800;
 
 function normalizePlate(value: string) { return value.toUpperCase().replace(/[^A-Z0-9]/g, ""); }
 function editDistance(a: string, b: string) {
@@ -80,7 +86,79 @@ async function captureFrame(video: HTMLVideoElement) {
   const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => b ? resolve(b) : reject(Error("Frame capture failed")), "image/jpeg", 0.92));
   return new File([blob], "live-plate.jpg", { type: "image/jpeg" });
 }
-async function browserFallback(video: HTMLVideoElement) { return ocr(await captureFrame(video)); }
+
+async function getLiveOcrWorker(video: HTMLVideoElement): Promise<LiveOcrWorker> {
+  let cached = liveOcrWorkers.get(video);
+  if (!cached) {
+    cached = import("tesseract.js").then(async ({ createWorker, PSM }) => {
+      const worker = await createWorker("eng", 1, { workerPath: "/ocr/worker.min.js", corePath: "/ocr", langPath: "/ocr" });
+      await worker.setParameters({
+        tessedit_pageseg_mode: String(PSM.SINGLE_LINE),
+        tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+      });
+      return worker as unknown as LiveOcrWorker;
+    });
+    liveOcrWorkers.set(video, cached);
+  }
+  return cached;
+}
+
+function enhanceCanvas(canvas: HTMLCanvasElement, mode: number) {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return;
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    let value = gray;
+    if (mode === 1) value = gray > 135 ? 255 : 0;
+    if (mode === 2) value = Math.max(0, Math.min(255, (gray - 128) * 2.4 + 128));
+    data[i] = data[i + 1] = data[i + 2] = value;
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+async function browserPlateFallback(video: HTMLVideoElement): Promise<string> {
+  const worker = await getLiveOcrWorker(video);
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  if (!sourceWidth || !sourceHeight) throw Error("Camera frame unavailable");
+
+  const evidence = new Map<string, number>();
+  const crops = [0.46, 0.34];
+  for (let index = 0; index < crops.length; index += 1) {
+    const cropHeight = Math.round(sourceHeight * crops[index]);
+    const cropWidth = Math.round(sourceWidth * 0.94);
+    const cropX = Math.round((sourceWidth - cropWidth) / 2);
+    const cropY = Math.max(0, Math.round((sourceHeight - cropHeight) * (index === 0 ? 0.56 : 0.64)));
+    const scale = Math.min(2.6, 1800 / cropWidth);
+    for (let mode = 0; mode < 3; mode += 1) {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(cropWidth * scale));
+      canvas.height = Math.max(1, Math.round(cropHeight * scale));
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) continue;
+      ctx.imageSmoothingEnabled = true;
+      ctx.filter = "grayscale(1) contrast(1.55) saturate(0)";
+      ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+      ctx.filter = "none";
+      if (mode) enhanceCanvas(canvas, mode);
+      const result = await worker.recognize(canvas);
+      for (const candidate of plateCandidates(result.data.text)) {
+        const value = normalizePlate(candidate.value);
+        const score = (candidate.quality >= 100 ? 4 : 1) + (result.data.confidence >= 55 ? 2 : result.data.confidence >= 30 ? 1 : 0);
+        evidence.set(value, (evidence.get(value) ?? 0) + score);
+      }
+    }
+  }
+
+  const best = [...evidence.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
+  if (!best || best[0].length < 6) throw Error("Plate unclear");
+  return best[0];
+}
+
+async function browserFallback(video: HTMLVideoElement) { return browserPlateFallback(video); }
+
 export async function fastAlprFrame(video: HTMLVideoElement, endpoint = "/api/alpr"): Promise<string> {
   if (video.readyState < 2 || video.videoWidth === 0) throw Error("Camera not ready — wait for the preview to appear");
   const fallback = liveFallback.get(video);
