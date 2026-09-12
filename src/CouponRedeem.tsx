@@ -1,0 +1,13 @@
+import {useEffect,useRef,useState} from "react";
+import {Camera,Tag} from "lucide-react";
+import {api,errorText} from "./api";
+import {scan} from "./assist";
+import {soundFx} from "./sound";
+
+export function CouponRedeem({notify}:{notify:(s:string)=>void}){
+ const[code,setCode]=useState(""),[plate,setPlate]=useState(""),[looking,setLooking]=useState(false);const video=useRef<HTMLVideoElement>(null),stop=useRef<(()=>void)|undefined>();
+ useEffect(()=>()=>stop.current?.(),[]);
+ const resolveCoupon=async(value:string)=>{const normalized=value.trim();if(!normalized)return;setCode(normalized);setLooking(true);try{const row=await api<{id:string;plate:string;expires_at:string;redeemed_at:string|null}>(`/coupons/lookup?code=${encodeURIComponent(normalized)}`);setPlate(row.plate);notify(`Coupon ${normalized} found · vehicle ${row.plate} autofilled.`)}catch(e){notify(errorText(e))}finally{setLooking(false)}};
+ const start=async()=>{try{stop.current?.();if(!video.current)throw new Error("Scanner preview unavailable");const result=await scan(video.current,(value)=>{void resolveCoupon(value)});stop.current=()=>result.stop();}catch(e){notify(errorText(e))}};
+ return <section className="panel"><div className="flex items-center space-x-2 pb-2 border-b border-slate-100"><Tag className="w-5 h-5 text-amber-600"/><h2>Redeem Driver Coupon</h2></div><p className="muted">Scan the coupon QR. The coupon code and linked vehicle number are filled automatically.</p><form onSubmit={async e=>{e.preventDefault();try{await api("/coupons/redeem",{code,plate});soundFx.playSuccess();notify(`Coupon redeemed successfully for ${plate}`);setCode("");setPlate("")}catch(e){notify(errorText(e))}}}><label>Coupon ID / Code<input value={code} onChange={e=>void resolveCoupon(e.target.value)} required placeholder="FP1:..."/></label><label>Vehicle number<input value={plate} onChange={e=>setPlate(e.target.value.toUpperCase())} required placeholder="Autofilled from coupon QR"/></label><div className="actions"><button type="button" onClick={start} disabled={looking}><Camera/>Scan coupon QR</button><button type="button" onClick={()=>stop.current?.()}>Stop</button></div><video ref={video} muted playsInline className="w-full rounded-xl bg-black aspect-video object-cover"/><button className="primary" type="submit" disabled={!code||!plate||looking}>{looking?"Finding vehicle…":"Redeem coupon once"}</button></form></section>;
+}
