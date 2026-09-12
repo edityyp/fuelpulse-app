@@ -30,18 +30,61 @@ def variants(image):
     """Create a small set of OCR-friendly variants without changing plate geometry."""
     yield image
 
-    # Mild upscale + sharpening helps small plates and soft mobile-camera frames.
     up = cv2.resize(image, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
     blurred = cv2.GaussianBlur(up, (0, 0), 1.2)
     sharp = cv2.addWeighted(up, 1.45, blurred, -0.45, 0)
     yield sharp
 
-    # CLAHE improves plates affected by shadows/glare while retaining colour edges.
     lab = cv2.cvtColor(up, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     l = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8)).apply(l)
     enhanced = cv2.cvtColor(cv2.merge((l, a, b)), cv2.COLOR_LAB2BGR)
     yield enhanced
+
+
+def structural_score(text):
+    """Light Indian-plate shape prior; never rejects a candidate by shape alone."""
+    if re.fullmatch(r"[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{1,4}", text):
+        return 1.0
+    if re.fullmatch(r"[A-Z]{2}[0-9]{2,3}[A-Z]{0,3}[0-9]{1,4}", text):
+        return 0.75
+    return 0.25
+
+
+def consolidate(grouped):
+    """Merge truncated OCR readings with a longer compatible reading.
+
+    Mobile cameras often produce e.g. ABC1234 and ABC12345 on different frames.
+    Treating these as unrelated votes makes the shorter result win. If the shorter
+    reading is a prefix of a longer reading and the longer reading has reasonable
+    confidence, transfer the shorter evidence to the longer candidate.
+    """
+    items = []
+    for text, item in grouped.items():
+        items.append(
+            {
+                "text": text,
+                "votes": item["votes"],
+                "score": item["score"],
+                "ocr": item["ocr"],
+                "detection": item["detection"],
+            }
+        )
+
+    for short in items:
+        for long in items:
+            if short is long or len(long["text"]) <= len(short["text"]):
+                continue
+            if not long["text"].startswith(short["text"]):
+                continue
+            if len(long["text"]) - len(short["text"]) > 3:
+                continue
+            if long["score"] < short["score"] * 0.72:
+                continue
+            long["votes"] += short["votes"]
+            long["score"] = max(long["score"], short["score"] * 0.92)
+
+    return items
 
 
 def recognize(encoded):
@@ -52,13 +95,9 @@ def recognize(encoded):
     if image.shape[0] * image.shape[1] > 16_000_000:
         raise ValueError("Image dimensions are too large")
 
-    candidates = []
-    seen = set()
+    grouped = {}
 
-    # Run FastALPR on the original and two deterministic enhancement variants.
-    # We aggregate evidence instead of trusting a single OCR pass, which is the
-    # main fix for mobile frames where the final 1–2 characters are intermittently lost.
-    for variant_index, frame in enumerate(variants(image)):
+    for frame in variants(image):
         with contextlib.redirect_stdout(sys.stderr):
             results = alpr.predict(frame)
 
@@ -75,51 +114,41 @@ def recognize(encoded):
             ocr_score = confidence(result.ocr.confidence)
             detection_score = float(result.detection.confidence)
             score = ocr_score * detection_score
-            key = (text, variant_index)
-            if key in seen:
-                continue
-            seen.add(key)
-            candidates.append(
-                (score, text, ocr_score, detection_score, variant_index)
+            item = grouped.setdefault(
+                text,
+                {
+                    "votes": 0,
+                    "score": 0.0,
+                    "ocr": 0.0,
+                    "detection": 0.0,
+                },
             )
+            item["votes"] += 1
+            item["score"] = max(item["score"], score)
+            item["ocr"] = max(item["ocr"], ocr_score)
+            item["detection"] = max(item["detection"], detection_score)
 
-    if not candidates:
+    if not grouped:
         raise ValueError("No readable number plate found")
 
-    # Prefer repeated text across variants, then higher confidence, then longer
-    # text. Longer repeated readings are useful when one OCR pass truncates a suffix.
-    grouped = {}
-    for score, text, ocr_score, detection_score, variant_index in candidates:
-        item = grouped.setdefault(
-            text,
-            {"votes": 0, "best": (0.0, 0.0, 0.0, 0)}
-        )
-        item["votes"] += 1
-        item["best"] = max(
-            item["best"],
-            (score, ocr_score, detection_score, -variant_index),
-        )
-
-    ranked = sorted(
-        grouped.items(),
-        key=lambda pair: (
-            pair[1]["votes"],
-            pair[1]["best"][0],
-            len(pair[0]),
+    items = consolidate(grouped)
+    best = max(
+        items,
+        key=lambda item: (
+            item["votes"],
+            structural_score(item["text"]),
+            item["score"],
+            len(item["text"]),
         ),
-        reverse=True,
     )
 
-    text, item = ranked[0]
-    score, ocr_confidence, detection_confidence, _ = item["best"]
-
     return {
-        "plate": text,
-        "confidence": score,
-        "ocr_confidence": ocr_confidence,
-        "detection_confidence": detection_confidence,
-        "variants_checked": len(list(variants(image))),
-        "votes": item["votes"],
+        "plate": best["text"],
+        "confidence": best["score"],
+        "ocr_confidence": best["ocr"],
+        "detection_confidence": best["detection"],
+        "variants_checked": 3,
+        "votes": best["votes"],
     }
 
 
