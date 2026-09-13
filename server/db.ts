@@ -5,6 +5,8 @@ import type { Actor } from '../shared/contracts.js';
 import { mockDb } from './mockDb.js';
 
 const databaseUrl = process.env.DATABASE_URL;
+const isProduction = process.env.NODE_ENV === 'production';
+const allowMockDb = !isProduction && process.env.FUELPULSE_ALLOW_MOCK_DB === 'true';
 const hasRealDb = Boolean(databaseUrl);
 
 function buildDbConfig() {
@@ -31,10 +33,17 @@ function buildDbConfig() {
 }
 
 const realPool = hasRealDb ? new pg.Pool(buildDbConfig()!) : null;
-let useMock = !hasRealDb;
+let useMock = allowMockDb;
+
+function databaseUnavailableError(cause?: unknown) {
+  const error = new Error('Production database unavailable');
+  Object.assign(error, { statusCode: 503, cause });
+  return error;
+}
 
 const mockClient = {
   query: async (text: string, params?: unknown[]) => {
+    if (!allowMockDb) throw databaseUnavailableError();
     return mockDb.executeQuery(text, params);
   },
   release: () => {},
@@ -43,26 +52,39 @@ const mockClient = {
 export const pool = {
   query: async (text: string, params?: unknown[]) => {
     if (useMock || !realPool) {
-      return mockDb.executeQuery(text, params);
+      if (allowMockDb) return mockDb.executeQuery(text, params);
+      throw databaseUnavailableError();
     }
     try {
       return await realPool.query(text, params);
     } catch (err) {
-      console.warn("Database connection unavailable, active mock fallback:", (err as Error).message);
-      useMock = true;
-      return mockDb.executeQuery(text, params);
+      // Never silently switch a production request to the in-memory database.
+      // Doing so can make authentication/admin writes appear successful while
+      // no real data is persisted.
+      if (allowMockDb) {
+        console.warn('Database connection unavailable, active mock fallback:', (err as Error).message);
+        useMock = true;
+        return mockDb.executeQuery(text, params);
+      }
+      console.error('Database connection unavailable:', (err as Error).message);
+      throw databaseUnavailableError(err);
     }
   },
   connect: async () => {
     if (useMock || !realPool) {
-      return mockClient as unknown as pg.PoolClient;
+      if (allowMockDb) return mockClient as unknown as pg.PoolClient;
+      throw databaseUnavailableError();
     }
     try {
       return await realPool.connect();
     } catch (err) {
-      console.warn("Database connection unavailable, active mock fallback:", (err as Error).message);
-      useMock = true;
-      return mockClient as unknown as pg.PoolClient;
+      if (allowMockDb) {
+        console.warn('Database connection unavailable, active mock fallback:', (err as Error).message);
+        useMock = true;
+        return mockClient as unknown as pg.PoolClient;
+      }
+      console.error('Database connection unavailable:', (err as Error).message);
+      throw databaseUnavailableError(err);
     }
   },
   end: async () => {
