@@ -10,3 +10,4 @@ Phase 2 has started. The existing FastALPR backend is already the primary recogn
 6. Preserve all existing security, tenant isolation, RLS, custom session auth, and excluded-feature constraints.
 
 Phase 1 digital receipts remain explicitly download-only and are not replaced with WhatsApp functionality.
+ 
