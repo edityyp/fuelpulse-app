@@ -47,7 +47,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      path: '/admin',
+      path: '/',
       maxAge: SESSION_HOURS * 3600,
     });
     return { ok: true };
@@ -61,7 +61,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
   app.post('/api/admin/logout', async (req, reply) => {
     const token = req.cookies[ADMIN_COOKIE];
     if (token) await tx(c => c.query('delete from app.admin_sessions where token_hash=$1', [digest(token)]));
-    reply.clearCookie(ADMIN_COOKIE, { path: '/admin' });
+    reply.clearCookie(ADMIN_COOKIE, { path: '/' });
     return { ok: true };
   });
 
