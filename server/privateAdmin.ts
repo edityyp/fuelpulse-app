@@ -67,9 +67,17 @@ export async function privateAdminRoutes(app: FastifyInstance) {
 
   app.get('/api/admin/organizations', async req => {
     await requireAdmin(req);
-    return tx(async c => (await c.query(`select o.id,o.slug,o.name,o.created_at,
+    return tx(async c => (await c.query(`select o.id,o.slug,o.name,o.active,o.created_at,
       (select count(*) from app.users u where u.organization_id=o.id and u.active) as active_users
       from app.organizations o order by o.created_at desc`)).rows);
+  });
+
+  app.patch('/api/admin/organizations/:id/status', async req => {
+    await requireAdmin(req);
+    const id = (req.params as { id?: string }).id;
+    const body = req.body as { active?: unknown };
+    if (!id || typeof body?.active !== 'boolean') fail(400, 'A valid organization ID and active state are required');
+    return tx(async c => (await c.query('select * from app.admin_set_organization_active($1,$2)', [id, body.active])).rows[0]);
   });
 
   app.post('/api/admin/owners', async req => {
