@@ -31,6 +31,6 @@ export async function buildApp() {
   await privateAdminRoutes(app);
   await authRoutes(app);routes(app);customerRoutes(app);alprRoutes(app);phase1Routes(app);offerRoutes(app);loyaltyRoutes(app);
   app.get("/api/health",async()=>{await pool.query("select 1");return {status:"ok"}});
-  if(existsSync(resolve("dist"))){await app.register(files,{root:resolve("dist")});app.get("/admin",async(_req,reply)=>reply.sendFile("admin.html"));app.setNotFoundHandler((req,reply)=>req.url.startsWith("/api/")?reply.code(404).send({error:"Not found"}):reply.sendFile("index.html"))}
+  if(existsSync(resolve("dist"))){await app.register(files,{root:resolve("dist")});app.get("/admin",async(_req,reply)=>reply.sendFile("admin-v7.html"));app.setNotFoundHandler((req,reply)=>req.url.startsWith("/api/")?reply.code(404).send({error:"Not found"}):reply.sendFile("index.html"))}
   return app;
 }
