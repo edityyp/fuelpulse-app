@@ -1,4 +1,4 @@
-import { rm, readFile } from 'node:fs/promises';
+import { rm, readFile, copyFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 
 await rm('dist', { recursive: true, force: true });
@@ -30,4 +30,7 @@ for (const marker of forbidden) {
   if (admin.includes(marker)) throw new Error(`Admin build verification failed: stale content detected (${marker})`);
 }
 
-console.log('Admin portal build verified:', 'dist/admin.html');
+// Publish the verified admin artifact under a build-specific filename so a stale
+// Vercel/static-cache artifact can never satisfy the /admin rewrite.
+await copyFile('dist/admin.html', 'dist/admin-v7.html');
+console.log('Admin portal build verified:', 'dist/admin-v7.html');
