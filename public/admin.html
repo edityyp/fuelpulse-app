@@ -1,116 +1,26 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>FuelPulse Admin</title>
-  <style>
-    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f4f7fc;color:#172033}
-    main{max-width:1050px;margin:0 auto;padding:40px 20px}
-    .card{background:#fff;border:1px solid #dfe6f2;border-radius:18px;padding:24px;box-shadow:0 12px 40px #17345a12;margin-bottom:20px}
-    h1,h2{margin:0 0 10px} p{color:#68758a}
-    label{display:block;font-weight:600;margin:14px 0 6px}
-    input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font:inherit}
-    button{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer}
-    button:disabled{opacity:.55;cursor:not-allowed}
-    .primary{background:#1754bd;color:white}.secondary{background:#e8eef8;color:#17345a}.danger{background:#fee2e2;color:#991b1b}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.actions{display:flex;gap:8px;flex-wrap:wrap}
-    .row{display:flex;justify-content:space-between;gap:16px;align-items:center;border-top:1px solid #edf0f5;padding:16px 0}
-    .row:first-child{border-top:0}.org-main{min-width:0}.org-name{font-weight:750}.meta{color:#68758a;font-size:13px;margin-top:4px}
-    .status{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:800;margin-left:8px}
-    .enabled{background:#dcfce7;color:#166534}.disabled{background:#fee2e2;color:#991b1b}
-    .grid{display:grid;grid-template-columns:1fr 1.2fr;gap:20px}.error{color:#b42318;background:#fff0f0;padding:10px;border-radius:9px}
-    .success{background:#eefbf3;padding:16px;border-radius:12px}.credential{margin-top:12px}.credential-label{font-weight:700;margin-bottom:5px}
-    .credential-line{display:flex;gap:8px;align-items:stretch}.secret{flex:1;min-width:0;font-family:ui-monospace,monospace;background:#f5f7fa;padding:10px;border-radius:7px;word-break:break-all;white-space:pre-wrap}
-    .copy{flex:0 0 auto}.copied{background:#d1fae5;color:#065f46}.muted{text-align:center;padding:18px 0;color:#68758a}
-    @media(max-width:760px){.grid{grid-template-columns:1fr}.header{align-items:stretch;flex-direction:column}main{padding:20px 14px}.row{align-items:flex-start;flex-direction:column}.row .actions{width:100%}.row .actions button{flex:1}.credential-line{align-items:stretch}.copy{padding:10px 12px}}
-  </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>FuelPulse Admin</title>
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f4f7fc;color:#172033}main{max-width:1050px;margin:0 auto;padding:40px 20px}.card{background:#fff;border:1px solid #dfe6f2;border-radius:18px;padding:24px;box-shadow:0 12px 40px #17345a12;margin-bottom:20px}h1,h2{margin:0 0 10px}p{color:#68758a}label{display:block;font-weight:600;margin:14px 0 6px}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font:inherit}button{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.primary{background:#1754bd;color:white}.secondary{background:#e8eef8;color:#17345a}.danger{background:#fee2e2;color:#991b1b}.header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}.actions{display:flex;gap:8px;flex-wrap:wrap}.row{display:flex;justify-content:space-between;gap:16px;align-items:center;border-top:1px solid #edf0f5;padding:16px 0}.row:first-child{border-top:0}.org-main{min-width:0}.org-name{font-weight:750}.meta{color:#68758a;font-size:13px;margin-top:4px}.status{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:800;margin-left:8px}.enabled{background:#dcfce7;color:#166534}.disabled{background:#fee2e2;color:#991b1b}.grid{display:grid;grid-template-columns:1fr 1.2fr;gap:20px}.error{color:#b42318;background:#fff0f0;padding:10px;border-radius:9px}.success{background:#eefbf3;padding:16px;border-radius:12px}.credential{margin-top:12px}.credential-label{font-weight:700;margin-bottom:5px}.credential-line{display:flex;gap:8px;align-items:stretch}.secret{flex:1;min-width:0;font-family:ui-monospace,monospace;background:#f5f7fa;padding:10px;border-radius:7px;word-break:break-all;white-space:pre-wrap}.copy{flex:0 0 auto}.copied{background:#d1fae5;color:#065f46}.muted{text-align:center;padding:18px 0;color:#68758a}.build{font-size:11px;color:#94a3b8;margin-top:4px}@media(max-width:760px){.grid{grid-template-columns:1fr}.header{align-items:stretch;flex-direction:column}main{padding:20px 14px}.row{align-items:flex-start;flex-direction:column}.row .actions{width:100%}.row .actions button{flex:1}.credential-line{align-items:stretch}.copy{padding:10px 12px}}
+</style>
 </head>
-<body>
-<main><div id="app"></div></main>
+<body><main><div id="app"></div></main>
 <script>
 'use strict';
 const root=document.getElementById('app');
-
-async function request(path,options={}){
-  const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
-  let d={};
-  try{d=await r.json()}catch{}
-  if(!r.ok)throw Error(d.error||'Request failed');
-  return d;
-}
-
-function escapeHtml(value){
-  return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-async function copyCredential(id,button){
-  const value=document.getElementById(id)?.textContent?.trim()||'';
-  if(!value)return;
-  try{
-    if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(value)}
-    else{const area=document.createElement('textarea');area.value=value;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.focus();area.select();document.execCommand('copy');area.remove()}
-    const old=button.textContent;button.textContent='Copied';button.classList.add('copied');setTimeout(()=>{button.textContent=old;button.classList.remove('copied')},1400)
-  }catch{button.textContent='Copy failed';setTimeout(()=>button.textContent='Copy',1400)}
-}
-
-function credential(label,id,value){
-  return '<div class="credential"><div class="credential-label">'+label+'</div><div class="credential-line"><div class="secret" id="'+id+'">'+escapeHtml(value)+'</div><button type="button" class="secondary copy" onclick="copyCredential(\''+id+'\',this)">Copy</button></div></div>';
-}
-
-function login(){
-  root.innerHTML='<div class="card" style="max-width:460px;margin:80px auto"><h1>FuelPulse Admin</h1><p>Private control panel. Customer owners never use this login.</p><form id="login"><label>Admin password</label><input id="password" type="password" autocomplete="current-password" required><button class="primary" style="margin-top:16px">Sign in</button><div id="msg"></div></form></div>';
-  document.getElementById('login').onsubmit=async e=>{
-    e.preventDefault();const form=e.currentTarget;const m=document.getElementById('msg');m.innerHTML='';
-    try{await request('/api/admin/login',{method:'POST',body:JSON.stringify({password:document.getElementById('password').value})});await dashboard()}
-    catch(x){m.innerHTML='<p class="error">'+escapeHtml(x.message)+'</p>'}
-  };
-}
-
-async function toggleOrganization(id,active){
-  const action=active?'enable':'disable';
-  if(!confirm('Are you sure you want to '+action+' this organization?'))return;
-  try{
-    await request('/api/admin/organizations/'+encodeURIComponent(id)+'/status',{method:'PATCH',body:JSON.stringify({active})});
-    await loadOrgs();
-  }catch(x){alert(x.message)}
-}
-
-async function dashboard(){
-  try{await request('/api/admin/me')}catch{return login()}
-  root.innerHTML='<div class="header"><div><h1>FuelPulse Admin</h1><p>Provision and manage customer station owners.</p></div><div class="actions"><button id="refresh" class="secondary">Refresh organizations</button><button id="logout" class="danger">Sign out</button></div></div><div class="grid"><section class="card"><h2>Create owner</h2><p>Creates a new isolated organization and owner account atomically.</p><form id="create"><label>Business / station name</label><input name="organizationName" placeholder="Central Fuel Station" required><label>Station ID</label><input name="stationId" placeholder="central-station" pattern="[a-z0-9-]+" required><label>Owner name</label><input name="ownerName" placeholder="Owner name" required><button class="primary" style="margin-top:16px">Generate owner credentials</button><div id="result"></div></form></section><section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><h2>Organizations</h2><p style="margin-bottom:0">All customer organizations in the system.</p></div><span id="count" class="meta"></span></div><div id="orgs"><div class="muted">Loading organizations…</div></div></section></div>';
-  const createForm=document.getElementById('create');
-  createForm.onsubmit=async e=>{
-    e.preventDefault();
-    const form=e.currentTarget;
-    const body=Object.fromEntries(new FormData(form));
-    const result=document.getElementById('result');result.innerHTML='Creating…';
-    try{
-      const d=await request('/api/admin/owners',{method:'POST',body:JSON.stringify(body)});
-      result.innerHTML='<div class="success"><strong>Owner created. Save these credentials now.</strong>'+credential('Station ID','cred-station',d.slug)+credential('Owner code','cred-code',d.code)+credential('Temporary password','cred-password',d.ownerPassword)+'</div>';
-      form.reset();
-      await loadOrgs();
-    }catch(x){result.innerHTML='<p class="error">'+escapeHtml(x.message)+'</p>'}
-  };
-  document.getElementById('refresh').onclick=loadOrgs;
-  document.getElementById('logout').onclick=async()=>{try{await request('/api/admin/logout',{method:'POST'})}finally{login()}};
-  await loadOrgs();
-}
-
-async function loadOrgs(){
-  const container=document.getElementById('orgs');if(!container)return;
-  const refresh=document.getElementById('refresh');if(refresh)refresh.disabled=true;
-  container.innerHTML='<div class="muted">Loading organizations…</div>';
-  try{
-    const rows=await request('/api/admin/organizations');
-    const count=document.getElementById('count');if(count)count.textContent=rows.length+' organization'+(rows.length===1?'':'s');
-    container.innerHTML=rows.length?rows.map(x=>'<div class="row"><div class="org-main"><div class="org-name">'+escapeHtml(x.name)+' <span class="status '+(x.active?'enabled':'disabled')+'">'+(x.active?'Enabled':'Disabled')+'</span></div><div class="meta">Station ID: '+escapeHtml(x.slug)+' · '+escapeHtml(x.active_users)+' active users</div></div><div class="actions"><button class="'+(x.active?'danger':'primary')+'" onclick="toggleOrganization(\''+escapeHtml(x.id)+'\','+(!x.active)+')">'+(x.active?'Disable':'Enable')+'</button></div></div>').join(''):'<div class="muted">No organizations yet.</div>';
-  }catch(x){container.innerHTML='<p class="error">Unable to load organizations: '+escapeHtml(x.message)+'</p>'}
-  finally{if(refresh)refresh.disabled=false}
-}
-
+const BUILD='admin-2026-09-13.3';
+async function request(path,options={}){const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');return d}
+function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function copyText(value,button){if(!value)return;try{if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function'){await navigator.clipboard.writeText(value)}else{const area=document.createElement('textarea');area.value=value;area.setAttribute('readonly','');area.style.position='fixed';area.style.left='-9999px';document.body.appendChild(area);area.select();const ok=document.execCommand('copy');area.remove();if(!ok)throw Error('Clipboard unavailable')}const old=button.textContent;button.textContent='Copied';button.classList.add('copied');setTimeout(()=>{button.textContent=old;button.classList.remove('copied')},1400)}catch{const old=button.textContent;button.textContent='Copy failed';setTimeout(()=>button.textContent=old,1400)}}
+function credential(label,id,value){return '<div class="credential"><div class="credential-label">'+label+'</div><div class="credential-line"><div class="secret" data-credential="'+id+'">'+escapeHtml(value)+'</div><button type="button" class="secondary copy" data-copy="'+id+'">Copy</button></div></div>'}
+function wireCopyButtons(){root.querySelectorAll('[data-copy]').forEach(button=>{button.onclick=()=>{const id=button.getAttribute('data-copy');const value=root.querySelector('[data-credential="'+CSS.escape(id)+'"]')?.textContent?.trim()||'';void copyText(value,button)}})}
+function login(){root.innerHTML='<div class="card" style="max-width:460px;margin:80px auto"><h1>FuelPulse Admin</h1><p>Private control panel. Customer owners never use this login.</p><form id="login"><label>Admin password</label><input id="password" type="password" autocomplete="current-password" required><button class="primary" style="margin-top:16px">Sign in</button><div id="msg"></div></form><div class="build">Build: '+BUILD+'</div></div>';document.getElementById('login').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;const m=document.getElementById('msg');m.innerHTML='';try{await request('/api/admin/login',{method:'POST',body:JSON.stringify({password:document.getElementById('password').value})});await dashboard()}catch(x){m.innerHTML='<p class="error">'+escapeHtml(x.message)+'</p>'}}}
+async function toggleOrganization(id,active){if(!confirm('Are you sure you want to '+(active?'enable':'disable')+' this organization?'))return;try{await request('/api/admin/organizations/'+encodeURIComponent(id)+'/status',{method:'PATCH',body:JSON.stringify({active})});await loadOrgs()}catch(x){alert(x.message)}}
+async function dashboard(){try{await request('/api/admin/me')}catch{return login()}root.innerHTML='<div class="header"><div><h1>FuelPulse Admin</h1><p>Provision and manage customer station owners.</p><div class="build">Build: '+BUILD+'</div></div><div class="actions"><button id="refresh" type="button" class="secondary">Refresh organizations</button><button id="logout" type="button" class="danger">Sign out</button></div></div><div class="grid"><section class="card"><h2>Create owner</h2><p>Creates a new isolated organization and owner account atomically.</p><form id="create"><label>Business / station name</label><input name="organizationName" placeholder="Central Fuel Station" required><label>Station ID</label><input name="stationId" placeholder="central-station" pattern="[a-z0-9-]{3,63}" required><label>Owner name</label><input name="ownerName" placeholder="Owner name" required><button class="primary" style="margin-top:16px">Generate owner credentials</button><div id="result"></div></form></section><section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><h2>Organizations</h2><p style="margin-bottom:0">All customer organizations in the system.</p></div><span id="count" class="meta"></span></div><div id="orgs"><div class="muted">Loading organizations…</div></div></section></div>';
+const createForm=document.getElementById('create');createForm.onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;const body=Object.fromEntries(new FormData(form));const result=document.getElementById('result');result.innerHTML='Creating…';try{const d=await request('/api/admin/owners',{method:'POST',body:JSON.stringify(body)});result.innerHTML='<div class="success"><strong>Owner created. Save these credentials now.</strong>'+credential('Station ID','station',d.station_slug||d.slug)+credential('Owner code','code',d.owner_code||d.code)+credential('Temporary password','password',d.ownerPassword)+'</div>';form.reset();wireCopyButtons();await loadOrgs()}catch(x){result.innerHTML='<p class="error">'+escapeHtml(x.message)+'</p>'}};
+document.getElementById('refresh').onclick=()=>void loadOrgs();document.getElementById('logout').onclick=async()=>{try{await request('/api/admin/logout',{method:'POST'})}finally{login()}};await loadOrgs()}
+async function loadOrgs(){const container=document.getElementById('orgs');if(!container)return;const refresh=document.getElementById('refresh');if(refresh)refresh.disabled=true;container.innerHTML='<div class="muted">Loading organizations…</div>';try{const rows=await request('/api/admin/organizations');const count=document.getElementById('count');if(count)count.textContent=rows.length+' organization'+(rows.length===1?'':'s');container.innerHTML=rows.length?rows.map(x=>'<div class="row"><div class="org-main"><div class="org-name">'+escapeHtml(x.name)+' <span class="status '+(x.active?'enabled':'disabled')+'">'+(x.active?'Enabled':'Disabled')+'</span></div><div class="meta">Station ID: '+escapeHtml(x.slug)+' · '+escapeHtml(x.active_users)+' active users</div></div><div class="actions"><button type="button" class="'+(x.active?'danger':'primary')+'" data-org-id="'+escapeHtml(x.id)+'" data-org-active="'+(!x.active)+'">'+(x.active?'Disable':'Enable')+'</button></div></div>').join(''):'<div class="muted">No organizations yet.</div>';container.querySelectorAll('[data-org-id]').forEach(button=>{button.onclick=()=>void toggleOrganization(button.getAttribute('data-org-id'),button.getAttribute('data-org-active')==='true')})}catch(x){container.innerHTML='<p class="error">Unable to load organizations: '+escapeHtml(x.message)+'</p>'}finally{if(refresh)refresh.disabled=false}}
 dashboard();
-</script>
-</body>
-</html>
+</script></body></html>
