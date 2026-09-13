@@ -15,10 +15,12 @@
       ]
     }
   ],
+  "redirects": [
+    { "source": "/admin", "destination": "/admin-v7.html", "permanent": false },
+    { "source": "/admin/", "destination": "/admin-v7.html", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/admin", "destination": "/admin-v7.html" },
-    { "source": "/admin/", "destination": "/admin-v7.html" },
     { "source": "/customer", "destination": "/index.html" },
     { "source": "/customer/(.*)", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
