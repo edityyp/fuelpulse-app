@@ -1,8 +1,22 @@
 {
+  "headers": [
+    {
+      "source": "/admin",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/admin.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/admin/", "destination": "/admin.html" },
+    { "source": "/admin", "destination": "/admin.html?__admin_build=20260913-4" },
+    { "source": "/admin/", "destination": "/admin.html?__admin_build=20260913-4" },
     { "source": "/customer", "destination": "/index.html" },
     { "source": "/customer/(.*)", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
