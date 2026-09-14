@@ -1,11 +1,11 @@
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
-import files from "@fastify/static";
 import rateLimit from "@fastify/rate-limit";
 import { ZodError } from "zod";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { authRoutes, actor } from "./auth.js";
 import { privateAdminRoutes } from "./privateAdmin.js";
 import { routes } from "./routes.js";
@@ -16,6 +16,11 @@ import { offerRoutes } from "./offers.js";
 import { pool, tx, fail } from "./db.js";
 import { loyaltyRoutes } from "./loyalty.js";
 import { coupon } from "../shared/contracts.js";
+
+async function sendDistFile(reply: any, filename: string) {
+  const html = await readFile(resolve("dist", filename), "utf8");
+  return reply.type("text/html; charset=utf-8").send(html);
+}
 
 export async function buildApp() {
   const configuredOrigins = (process.env.APP_ORIGIN ?? "").split(",").map((value) => value.trim().replace(/\/$/, "")).filter(Boolean);
@@ -31,6 +36,9 @@ export async function buildApp() {
   await privateAdminRoutes(app);
   await authRoutes(app);routes(app);customerRoutes(app);alprRoutes(app);phase1Routes(app);offerRoutes(app);loyaltyRoutes(app);
   app.get("/api/health",async()=>{await pool.query("select 1");return {status:"ok"}});
-  if(existsSync(resolve("dist"))){await app.register(files,{root:resolve("dist")});app.get("/admin",async(_req,reply)=>reply.sendFile("admin-v7.html"));app.setNotFoundHandler((req,reply)=>req.url.startsWith("/api/")?reply.code(404).send({error:"Not found"}):reply.sendFile("index.html"))}
+  if(existsSync(resolve("dist"))){
+    app.get("/admin",async(_req,reply)=>sendDistFile(reply,"admin-v7.html"));
+    app.setNotFoundHandler((req,reply)=>req.url.startsWith("/api/")?reply.code(404).send({error:"Not found"}):sendDistFile(reply,"index.html"));
+  }
   return app;
 }
