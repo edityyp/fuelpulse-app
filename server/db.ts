@@ -1,6 +1,4 @@
 import pg from 'pg';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { Actor } from '../shared/contracts.js';
 import { mockDb } from './mockDb.js';
 
@@ -12,20 +10,20 @@ const hasRealDb = Boolean(databaseUrl);
 function buildDbConfig() {
   if (!databaseUrl) return null;
 
-  // Vercel does not apply the Railway Dockerfile's NODE_EXTRA_CA_CERTS setup.
-  // Load the approved Supabase CA directly so node-postgres can verify the
-  // session-pooler certificate without weakening TLS verification.
+  // Keep the connection string exactly as supplied by Supabase/Vercel.  In
+  // particular, don't rewrite the pooler host or credentials.  Supabase's
+  // current certificates are publicly trusted, so Node can validate the TLS
+  // chain without requiring a repository-local CA file.  This also prevents a
+  // missing build artifact from crashing the Vercel function during import.
   const connection = new URL(databaseUrl);
   connection.searchParams.delete('sslmode');
   connection.searchParams.delete('sslcert');
   connection.searchParams.delete('sslkey');
   connection.searchParams.delete('sslrootcert');
 
-  const ca = readFileSync(resolve(process.cwd(), 'certs/supabase-root-2021-ca.crt'), 'utf8');
-
   return {
     connectionString: connection.toString(),
-    ssl: { ca, rejectUnauthorized: true },
+    ssl: { rejectUnauthorized: true },
     max: 20,
     connectionTimeoutMillis: 5000,
     statement_timeout: 15000,
