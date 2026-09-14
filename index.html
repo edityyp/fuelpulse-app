@@ -19,7 +19,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet" />
     <title>FuelPulse — Smart Fuel Management & Forecourt Rewards</title>
-    <style>#fuelpulse-install{display:none;position:fixed;right:16px;bottom:16px;z-index:9999;border:0;border-radius:999px;padding:12px 16px;background:#1754bd;color:#fff;font:700 14px Inter,system-ui,sans-serif;box-shadow:0 10px 30px rgba(15,23,42,.24);cursor:pointer}#fuelpulse-install.show{display:block}</style>
+    <style>
+      #fuelpulse-install{display:none;position:fixed;right:16px;bottom:16px;z-index:9999;border:0;border-radius:999px;padding:12px 16px;background:#1754bd;color:#fff;font:700 14px Inter,system-ui,sans-serif;box-shadow:0 10px 30px rgba(15,23,42,.24);cursor:pointer}
+      #fuelpulse-install.show{display:block}
+      @media(max-width:760px){
+        #fp-menu-button{display:grid;place-items:center;position:fixed;left:14px;top:12px;width:44px;height:44px;min-height:44px;padding:0;border-radius:12px;background:#fff;border:1px solid #dbe4f1;box-shadow:0 6px 20px rgba(20,44,83,.14);z-index:1000;font-size:0}
+        #fp-menu-button span,#fp-menu-button span:before,#fp-menu-button span:after{display:block;width:20px;height:2px;border-radius:2px;background:#17345a;content:"";position:relative}
+        #fp-menu-button span:before{position:absolute;top:-6px}.fp-menu-open #fp-menu-button span{background:transparent}.fp-menu-open #fp-menu-button span:before{transform:translateY(6px) rotate(45deg)}.fp-menu-open #fp-menu-button span:after{transform:translateY(-6px) rotate(-45deg)}
+        #fp-menu-backdrop{display:none;position:fixed;inset:0;background:rgba(10,25,50,.38);backdrop-filter:blur(2px);z-index:998}
+        .fp-menu-open #fp-menu-backdrop{display:block}
+        .fp-menu-open .app aside{transform:translateX(0)!important}
+      }
+      @media(min-width:761px){#fp-menu-button,#fp-menu-backdrop{display:none!important}}
+    </style>
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-emerald-500 selection:text-white">
     <div id="root"></div>
@@ -30,6 +42,16 @@
       window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();fuelPulseInstallEvent=event;const button=document.getElementById('fuelpulse-install');button?.classList.add('show');});
       document.getElementById('fuelpulse-install')?.addEventListener('click',async()=>{if(!fuelPulseInstallEvent)return;fuelPulseInstallEvent.prompt();await fuelPulseInstallEvent.userChoice;fuelPulseInstallEvent=null;document.getElementById('fuelpulse-install')?.classList.remove('show');});
       window.addEventListener('appinstalled',()=>document.getElementById('fuelpulse-install')?.classList.remove('show'));
+      function setupFuelPulseMenu(){
+        if(window.innerWidth>760||document.getElementById('fp-menu-button'))return;
+        const button=document.createElement('button');button.id='fp-menu-button';button.type='button';button.setAttribute('aria-label','Open navigation');button.setAttribute('aria-expanded','false');button.innerHTML='<span></span>';
+        const backdrop=document.createElement('div');backdrop.id='fp-menu-backdrop';backdrop.addEventListener('click',closeMenu);document.body.append(button,backdrop);
+        button.addEventListener('click',()=>document.documentElement.classList.contains('fp-menu-open')?closeMenu():openMenu());
+        function openMenu(){document.documentElement.classList.add('fp-menu-open');button.setAttribute('aria-expanded','true');button.setAttribute('aria-label','Close navigation');}
+        function closeMenu(){document.documentElement.classList.remove('fp-menu-open');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label','Open navigation');}
+        document.addEventListener('click',e=>{if(!document.documentElement.classList.contains('fp-menu-open'))return;const t=e.target;if(t instanceof Element&&t.closest('.app aside nav button'))closeMenu();});
+      }
+      window.addEventListener('load',setupFuelPulseMenu);window.addEventListener('resize',()=>{if(window.innerWidth>760)document.documentElement.classList.remove('fp-menu-open');});
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
