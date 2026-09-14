@@ -1,17 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { fail } from "./db.js";
 
-/**
- * Server-side FastALPR has been retired. Plate recognition is now performed
- * on-device in the browser using the free Tesseract OCR engine, avoiding a
- * Python/model runtime in production serverless deployments.
- */
-export function recognizeImage(_image: Buffer): never {
-  fail(410, "Server ALPR is retired; use the on-device plate scanner");
+type RetiredRecognition={plate:string;confidence:number;ocr_confidence:number;detection_confidence:number};
+
+/** Server-side FastALPR is retired. Browser scanning uses free Tesseract OCR on-device. */
+export async function recognizeImage(_image:Buffer):Promise<RetiredRecognition>{
+  throw Error("Server ALPR is retired; use the on-device plate scanner");
 }
 
-export function alprRoutes(app: FastifyInstance) {
-  app.post("/api/alpr", async () => {
-    fail(410, "Server ALPR is retired; use the on-device plate scanner");
-  });
+export function alprRoutes(app:FastifyInstance){
+  app.post("/api/alpr",async()=>{throw Error("Server ALPR is retired; use the on-device plate scanner");});
 }
