@@ -1,10 +1,18 @@
-/* FuelPulse mobile shell: keep the desktop layout intact while making the staff UI fit phones. */
+/* FuelPulse mobile shell: full navigation lives in an off-canvas sidebar opened by the three-line menu. */
 @media (max-width: 760px){
   html,body,#root{width:100%;min-width:0;overflow-x:hidden}
   .app{display:block;min-height:100vh}
-  .app>aside{display:none}
-  .workspace{margin-left:0;width:100%;min-width:0}
-  .workspace>header{height:auto;min-height:60px;padding:12px 16px;gap:10px;font-size:12px}
+  .app>aside{display:flex;position:fixed;inset:0 auto 0 0;width:min(86vw,320px);height:100dvh;padding:24px 18px;background:#fff;border-right:1px solid #dbe4f1;border-top:0;box-shadow:18px 0 42px rgba(10,35,70,.18);z-index:999;transform:translateX(-105%);transition:transform .24s cubic-bezier(.22,1,.36,1);overflow-y:auto;overscroll-behavior:contain}
+  .app aside>.brand,.app aside>.navlabel,.app aside>.profile{display:flex}
+  .app aside>.brand{margin-bottom:4px}
+  .app aside>.navlabel{margin:26px 8px 12px}
+  .app aside nav{display:grid;gap:4px;width:100%;height:auto;overflow:visible}
+  .app aside nav button{flex:initial;width:100%;min-height:50px;padding:11px 12px;text-align:left;white-space:normal;line-height:1.2;font-size:14px;border-radius:11px;box-shadow:none}
+  .app aside nav button.active{background:#e7efff;color:#103f98;box-shadow:inset 0 0 0 1px #c7d8f7}
+  .app aside nav button.active:before{display:none}
+  .app aside .profile{margin-top:auto;padding-top:20px;border-top:1px solid #edf1f7}
+  .workspace{margin-left:0;width:100%;min-width:0;padding-bottom:24px}
+  .workspace>header{height:auto;min-height:60px;padding:12px 16px 12px 70px;gap:10px;font-size:12px;position:sticky;top:0;z-index:50;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
   .workspace>header>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .workspace>header code{font-size:11px}
   .workspace>main{padding:20px 14px 32px;max-width:none;width:100%;min-width:0}
