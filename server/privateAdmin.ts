@@ -5,8 +5,6 @@ import { digest, hashPassword } from './crypto.js';
 
 const ADMIN_COOKIE = 'fp_admin_session';
 const SESSION_HOURS = 8;
-const STATION_ID_SUFFIX_LENGTH = 8;
-const PROVISION_RETRIES = 5;
 
 function adminPasswordConfigured() {
   return Boolean(process.env.FUELPULSE_ADMIN_PASSWORD && process.env.FUELPULSE_ADMIN_PASSWORD.length >= 16);
@@ -28,41 +26,8 @@ async function requireAdmin(req: FastifyRequest) {
   });
 }
 
-const OWNER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const STATION_ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
-
-function randomCode(length: number, alphabet: string) {
-  const bytes = randomBytes(length);
-  let value = '';
-  for (const byte of bytes) value += alphabet[byte % alphabet.length];
-  return value;
-}
-
-function makeOwnerCode() {
-  return `FP-OWN-${randomCode(6, OWNER_CODE_ALPHABET)}`;
-}
-
-function makeOwnerPassword() {
-  return `Fp-${randomBytes(12).toString('base64url')}-2026!`;
-}
-
-function slugifyStationName(name: string) {
-  const base = name
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 54);
-  return (base.length >= 3 ? base : 'fuel-station');
-}
-
-function makeStationId(organizationName: string) {
-  return `${slugifyStationName(organizationName)}-${randomCode(STATION_ID_SUFFIX_LENGTH, STATION_ID_ALPHABET)}`;
-}
-
-function isUniqueConflict(error: unknown) {
-  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === '23505';
+function validCredential(value: string, label: string, min: number, max: number) {
+  if (value.length < min || value.length > max) fail(400, `${label} must be ${min}-${max} characters`);
 }
 
 export async function privateAdminRoutes(app: FastifyInstance) {
@@ -113,47 +78,54 @@ export async function privateAdminRoutes(app: FastifyInstance) {
 
   app.post('/api/admin/owners', async req => {
     await requireAdmin(req);
-    const body = req.body as { organizationName?: unknown; stationId?: unknown; ownerName?: unknown };
+    const body = req.body as {
+      organizationName?: unknown;
+      stationId?: unknown;
+      ownerName?: unknown;
+      ownerCode?: unknown;
+      ownerPassword?: unknown;
+    };
     const organizationName = typeof body?.organizationName === 'string' ? body.organizationName.trim() : '';
-    const requestedStationId = typeof body?.stationId === 'string' ? body.stationId.trim().toLowerCase() : '';
+    const stationId = typeof body?.stationId === 'string' ? body.stationId.trim().toLowerCase() : '';
     const ownerName = typeof body?.ownerName === 'string' ? body.ownerName.trim() : '';
-    if (!organizationName || !ownerName) fail(400, 'Organization name and owner name are required');
-    if (organizationName.length < 2 || organizationName.length > 120) fail(400, 'Organization name must be 2-120 characters');
-    if (ownerName.length < 2 || ownerName.length > 120) fail(400, 'Owner name must be 2-120 characters');
-    if (requestedStationId && !/^[a-z0-9][a-z0-9-]{2,62}$/.test(requestedStationId)) fail(400, 'Invalid station ID');
+    const ownerCode = typeof body?.ownerCode === 'string' ? body.ownerCode.trim() : '';
+    const ownerPassword = typeof body?.ownerPassword === 'string' ? body.ownerPassword : '';
 
-    const ownerPassword = makeOwnerPassword();
-    const passwordHash = await hashPassword(ownerPassword);
-
-    for (let attempt = 0; attempt < PROVISION_RETRIES; attempt += 1) {
-      const ownerCode = makeOwnerCode();
-      const stationId = requestedStationId || makeStationId(organizationName);
-      try {
-        const result = await tx(async c => (await c.query(
-          'select * from app.admin_provision_owner($1,$2,$3,$4,$5)',
-          [organizationName, stationId, ownerName, ownerCode, passwordHash],
-        )).rows[0]);
-        const stationSlug = String(result?.station_slug ?? result?.stationSlug ?? result?.station_id ?? result?.stationId ?? stationId).trim();
-        const returnedOwnerCode = String(result?.owner_code ?? result?.ownerCode ?? result?.code ?? ownerCode).trim();
-        if (!stationSlug || !returnedOwnerCode) fail(500, 'Owner provisioning returned incomplete server credentials');
-        return {
-          ...result,
-          station_slug: stationSlug,
-          station_id: stationSlug,
-          stationId: stationSlug,
-          slug: stationSlug,
-          owner_code: returnedOwnerCode,
-          ownerCode: returnedOwnerCode,
-          code: returnedOwnerCode,
-          ownerPassword,
-          owner_password: ownerPassword,
-          temporaryPassword: ownerPassword,
-        };
-      } catch (error) {
-        if (!isUniqueConflict(error) || requestedStationId) throw error;
-      }
+    if (!organizationName || !ownerName || !stationId || !ownerCode || !ownerPassword) {
+      fail(400, 'Business name, Station ID, owner name, owner code, and owner password are required');
     }
+    validCredential(organizationName, 'Business name', 2, 120);
+    validCredential(ownerName, 'Owner name', 2, 120);
+    validCredential(stationId, 'Station ID', 3, 63);
+    validCredential(ownerCode, 'Owner code', 4, 64);
+    validCredential(ownerPassword, 'Owner password', 12, 128);
+    if (!/^[a-z0-9][a-z0-9-]{2,62}$/.test(stationId)) fail(400, 'Station ID may contain lowercase letters, numbers, and hyphens only');
+    if (!/^[A-Za-z0-9_-]{4,64}$/.test(ownerCode)) fail(400, 'Owner code may contain letters, numbers, underscores, and hyphens only');
 
-    fail(409, 'Unable to allocate a unique station ID. Please retry.');
+    const passwordHash = await hashPassword(ownerPassword);
+    try {
+      const result = await tx(async c => (await c.query(
+        'select * from app.admin_provision_owner($1,$2,$3,$4,$5)',
+        [organizationName, stationId, ownerName, ownerCode, passwordHash],
+      )).rows[0]);
+      const stationSlug = String(result?.station_slug ?? result?.stationSlug ?? result?.station_id ?? result?.stationId ?? stationId).trim();
+      const returnedOwnerCode = String(result?.owner_code ?? result?.ownerCode ?? result?.code ?? ownerCode).trim();
+      if (!stationSlug || !returnedOwnerCode) fail(500, 'Owner provisioning returned incomplete credentials');
+      return {
+        ...result,
+        station_slug: stationSlug,
+        station_id: stationSlug,
+        stationId: stationSlug,
+        slug: stationSlug,
+        owner_code: returnedOwnerCode,
+        ownerCode: returnedOwnerCode,
+        code: returnedOwnerCode,
+        credentials_saved: true,
+      };
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error ? (error as {code?: unknown}).code : undefined;
+      if (code === '23505') fail(409, 'Station ID or owner code already exists. Choose unique credentials.');
+      throw error;
+    }
   });
 }
