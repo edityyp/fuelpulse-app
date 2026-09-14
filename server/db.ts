@@ -10,20 +10,22 @@ const hasRealDb = Boolean(databaseUrl);
 function buildDbConfig() {
   if (!databaseUrl) return null;
 
-  // Keep the connection string exactly as supplied by Supabase/Vercel.  In
-  // particular, don't rewrite the pooler host or credentials.  Supabase's
-  // current certificates are publicly trusted, so Node can validate the TLS
-  // chain without requiring a repository-local CA file.  This also prevents a
-  // missing build artifact from crashing the Vercel function during import.
   const connection = new URL(databaseUrl);
+  const host = connection.hostname.toLowerCase();
   connection.searchParams.delete('sslmode');
   connection.searchParams.delete('sslcert');
   connection.searchParams.delete('sslkey');
   connection.searchParams.delete('sslrootcert');
 
+  // Supabase's shared pooler can present a certificate chain that Node's
+  // bundled CA store on Vercel does not trust. TLS is still required; for the
+  // known Supabase pooler host we disable only certificate-chain verification.
+  // Never disable TLS itself and keep strict verification for other hosts.
+  const isSupabasePooler = host.endsWith('.pooler.supabase.com');
+
   return {
     connectionString: connection.toString(),
-    ssl: { rejectUnauthorized: true },
+    ssl: { rejectUnauthorized: !isSupabasePooler },
     max: 20,
     connectionTimeoutMillis: 5000,
     statement_timeout: 15000,
