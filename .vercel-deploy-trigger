@@ -1,1 +1,2 @@
 Production deployment trigger for the latest main branch application changes.
+Scanner: Tesseract OCR only; FastALPR removed.
