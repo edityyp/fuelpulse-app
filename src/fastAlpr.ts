@@ -2,8 +2,8 @@
 //
 // Design goals:
 // - Only ever return plate-looking text (letters + digits, no stray words).
-// - Return fast (~1-2s per call) so CameraAlprModal's 10s retry loop can
-//   land a confident read well inside its window.
+// - Return fast (~1-2s per call) so the modal's take-a-photo flow lands a
+//   result well inside the 4-10s target.
 // - No network calls: tesseract.js runs fully in the browser.
 
 import { createWorker, type Worker } from "tesseract.js";
@@ -17,16 +17,16 @@ const PLATE_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const MIN_PLATE_LEN = 4;
 const MAX_PLATE_LEN = 11;
 
-// Roughly matches the green guide box drawn over the video preview in
-// CameraAlprModal (a wide, short band centered in the frame). Cropping to it
-// before OCR means anything outside the guide - pump signage, other cars,
-// hands, etc. - never reaches the OCR engine in the first place.
-const CROP_WIDTH_RATIO = 0.92;
-const CROP_HEIGHT_RATIO = 0.3;
+// The photo flow asks the user to point the camera at the plate directly
+// (no on-screen guide box), so the plate itself usually fills most of the
+// frame. A looser crop than a live-video guide box would need — just trims
+// the outer edges, which are the most likely spot for stray
+// signage/background to creep in — works best here.
+const CROP_WIDTH_RATIO = 0.94;
+const CROP_HEIGHT_RATIO = 0.6;
 
-// A single warm worker is reused across every scan attempt (and across both
-// the live-frame and photo-upload paths) so we only pay the model-load cost
-// once per session instead of once per frame.
+// A single warm worker is reused across every scan attempt so we only pay
+// the model-load cost once per session instead of once per photo.
 let workerPromise: Promise<Worker> | null = null;
 
 async function getWorker(): Promise<Worker> {
@@ -43,9 +43,9 @@ async function getWorker(): Promise<Worker> {
 }
 
 /**
- * Crops the source image down to the plate-guide region, upscales small
- * crops for legibility, and binarizes it (grayscale + threshold) so
- * tesseract has a clean, high-contrast, plate-only image to read.
+ * Crops the source image down to the plate region, upscales small crops for
+ * legibility, and binarizes it (grayscale + threshold) so tesseract has a
+ * clean, high-contrast, plate-only image to read.
  */
 function prepareCanvas(
   source: CanvasImageSource,
@@ -114,15 +114,7 @@ async function recognizePlate(source: CanvasImageSource, width: number, height: 
   return plate;
 }
 
-/** Reads the current video frame. Called repeatedly by CameraAlprModal's capture loop. */
-export async function fastAlprFrame(video: HTMLVideoElement): Promise<string> {
-  if (!video.videoWidth || !video.videoHeight) {
-    throw new Error("Camera not ready");
-  }
-  return recognizePlate(video, video.videoWidth, video.videoHeight);
-}
-
-/** Reads a plate from an uploaded photo. */
+/** Reads a plate from a captured/uploaded photo. This is the primary entry point used by CameraAlprModal. */
 export async function fastAlprPhoto(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
   try {
@@ -130,4 +122,15 @@ export async function fastAlprPhoto(file: File): Promise<string> {
   } finally {
     bitmap.close();
   }
+}
+
+/**
+ * Reads a single live-video frame. Not currently used (the modal is
+ * photo-only), kept in case a live-scan mode is reintroduced later.
+ */
+export async function fastAlprFrame(video: HTMLVideoElement): Promise<string> {
+  if (!video.videoWidth || !video.videoHeight) {
+    throw new Error("Camera not ready");
+  }
+  return recognizePlate(video, video.videoWidth, video.videoHeight);
 }
