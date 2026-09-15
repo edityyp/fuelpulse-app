@@ -9,11 +9,35 @@ interface CameraAlprModalProps {
   onDetected: (plate: string) => void;
 }
 
+// Tried first; strict enough for a good read, loose enough that most rear
+// cameras can actually satisfy it.
+const PREFERRED_CONSTRAINTS: MediaStreamConstraints = {
+  audio: false,
+  video: {
+    facingMode: { ideal: "environment" },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+  },
+};
+
+// Fallback used only if the browser rejects the constraints above
+// (OverconstrainedError) - this is what was silently leaving the black box
+// on devices whose rear camera can't hit 1280x720+.
+const FALLBACK_CONSTRAINTS: MediaStreamConstraints = {
+  audio: false,
+  video: { facingMode: { ideal: "environment" } },
+};
+
+// How often we try a fresh OCR read while the camera is open.
+const SCAN_INTERVAL_MS = 500;
+
 export const CameraAlprModal: React.FC<CameraAlprModalProps> = ({ isOpen, onClose, onDetected }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [status, setStatus] = useState("Scanning… hold the plate steady");
   const [isProcessing, setIsProcessing] = useState(false);
+  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settled = useRef(false); // guards against double-fire once a plate is found
 
   useEffect(() => {
     if (!isOpen) {
@@ -23,81 +47,86 @@ export const CameraAlprModal: React.FC<CameraAlprModalProps> = ({ isOpen, onClos
     }
 
     soundFx.playTap();
+    settled.current = false;
     let active: MediaStream | null = null;
     let cancelled = false;
 
+    const startAutoScan = () => {
+      const tick = async () => {
+        if (cancelled || settled.current) return;
+        const video = videoRef.current;
+        if (video && video.readyState >= 2) {
+          try {
+            const detected = await fastAlprFrame(video);
+            if (!cancelled && !settled.current) {
+              settled.current = true;
+              soundFx.playSuccess();
+              setStatus(`Plate found: ${detected}`);
+              onDetected(detected);
+              onClose();
+              return; // stop the loop - modal is closing
+            }
+          } catch {
+            // No confident plate yet this frame - keep scanning silently.
+            // The status message stays put so the UI doesn't flicker every 500ms.
+          }
+        }
+        scanTimer.current = setTimeout(tick, SCAN_INTERVAL_MS);
+      };
+      scanTimer.current = setTimeout(tick, SCAN_INTERVAL_MS);
+    };
+
+    const openCamera = async (constraints: MediaStreamConstraints) => navigator.mediaDevices.getUserMedia(constraints);
+
     const init = async () => {
+      let media: MediaStream;
       try {
-        const media = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-          },
-        });
-        if (cancelled) {
-          media.getTracks().forEach((track) => track.stop());
+        media = await openCamera(PREFERRED_CONSTRAINTS);
+      } catch {
+        try {
+          media = await openCamera(FALLBACK_CONSTRAINTS);
+        } catch {
+          if (!cancelled) setStatus("Camera unavailable — upload a clear plate photo");
           return;
         }
-        active = media;
-        setStream(media);
-        if (videoRef.current) {
-          videoRef.current.srcObject = media;
-          videoRef.current.muted = true;
-          videoRef.current.playsInline = true;
-          await videoRef.current.play();
-        }
-        setStatus("Align the full plate inside the guide");
-      } catch {
-        setStatus("Camera unavailable — upload a clear plate photo");
       }
+
+      if (cancelled) {
+        media.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      active = media;
+      setStream(media);
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      video.srcObject = media;
+      video.muted = true;
+      video.playsInline = true;
+
+      try {
+        await video.play();
+      } catch {
+        if (!cancelled) setStatus("Tap the preview to start the camera");
+        return;
+      }
+
+      if (cancelled) return;
+      setStatus("Align the full plate inside the guide — reading automatically…");
+      startAutoScan();
     };
 
     void init();
     return () => {
       cancelled = true;
+      if (scanTimer.current) clearTimeout(scanTimer.current);
       active?.getTracks().forEach((track) => track.stop());
     };
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const handleCapture = async () => {
-    const video = videoRef.current;
-    if (!video || !stream) {
-      setStatus("Camera is not ready yet");
-      return;
-    }
-
-    setIsProcessing(true);
-    setStatus("Reading every plate character… keep steady");
-    soundFx.playScan();
-
-    try {
-      // fastAlprFrame now requires repeated, compatible OCR evidence before it
-      // can return a plate, so a partial one-frame read cannot be accepted.
-      const started = Date.now();
-      let detected: string | undefined;
-      while (Date.now() - started < 10000 && !detected) {
-        try {
-          detected = await fastAlprFrame(video);
-        } catch {
-          setStatus("Reading… move closer, reduce glare, keep all characters visible");
-        }
-        if (!detected) await new Promise((resolve) => setTimeout(resolve, 450));
-      }
-
-      if (!detected) throw Error("Complete plate not readable. Retake with all characters visible.");
-      soundFx.playSuccess();
-      onDetected(detected);
-      onClose();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Complete plate not readable");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   const handlePhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -107,6 +136,7 @@ export const CameraAlprModal: React.FC<CameraAlprModalProps> = ({ isOpen, onClos
     setStatus("Reading the complete plate from photo…");
     try {
       const detected = await fastAlprPhoto(file);
+      settled.current = true;
       soundFx.playSuccess();
       onDetected(detected);
       onClose();
@@ -123,7 +153,7 @@ export const CameraAlprModal: React.FC<CameraAlprModalProps> = ({ isOpen, onClos
         <div className="px-4 py-3.5 bg-slate-950 flex items-center justify-between border-b border-slate-800">
           <div>
             <span className="font-bold text-sm tracking-wide">FastALPR Plate Scanner</span>
-            <p className="text-[10px] text-slate-400">Complete-character verification enabled</p>
+            <p className="text-[10px] text-slate-400">Auto-captures the instant a plate is readable</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-xl text-slate-400 hover:text-white bg-slate-800" title="Close">
             <X className="w-5 h-5" />
@@ -145,21 +175,15 @@ export const CameraAlprModal: React.FC<CameraAlprModalProps> = ({ isOpen, onClos
 
         <div className="p-4 bg-slate-950 space-y-3">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="flex items-center gap-1"><Zap className="w-3.5 h-3.5 text-sky-400" /> Multi-frame OCR</span>
-            <span className="text-emerald-400 font-bold">{isProcessing ? "READING" : "READY"}</span>
+            <span className="flex items-center gap-1"><Zap className="w-3.5 h-3.5 text-sky-400" /> Auto-scanning</span>
+            <span className="text-emerald-400 font-bold">{stream ? "LIVE" : "STARTING"}</span>
           </div>
 
-          <button
-            onClick={handleCapture}
-            disabled={isProcessing || !stream}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Camera className="w-4 h-4" />
-            {isProcessing ? "Reading complete plate…" : "Scan complete plate"}
-          </button>
-
           <label className="block w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold text-xs text-center cursor-pointer">
-            Upload clear plate photo
+            <span className="inline-flex items-center justify-center gap-2">
+              <Camera className="w-4 h-4" />
+              {isProcessing ? "Reading photo…" : "Or upload a clear plate photo"}
+            </span>
             <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} disabled={isProcessing} className="hidden" />
           </label>
         </div>
