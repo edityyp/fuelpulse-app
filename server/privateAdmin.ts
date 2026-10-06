@@ -144,6 +144,8 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       await c.query('insert into public.subscription_payments(organization_id,subscription_id,plan_code,amount_paise,payment_method,payment_reference,notes) values($1,$2,$3,$4,$5,$6,$7)',
         [organizationId,sub.id,body.planCode,pricePaise,paymentMethod,paymentReference||null,notes||null]);
       await c.query('update public.organizations set enabled=true where id=$1',[organizationId]);
+      await c.query("update public.staff_accounts set active=true,subscription_blocked=false where organization_id=$1 and subscription_blocked=true",[organizationId]);
+      await c.query("update public.user_profiles set status='ACTIVE',subscription_blocked=false,updated_at=now() where organization_id=$1 and subscription_blocked=true",[organizationId]);
       return sub;
     });
   });
@@ -159,6 +161,8 @@ export async function privateAdminRoutes(app: FastifyInstance) {
         where organization_id=$1 returning id,status,block_reason`,[organizationId,reason])).rows[0];
       if(!row) fail(404,'Subscription not found');
       await c.query('update public.organizations set enabled=false where id=$1',[organizationId]);
+      await c.query("update public.staff_accounts set active=false,subscription_blocked=true where organization_id=$1 and active",[organizationId]);
+      await c.query("update public.user_profiles set status='SUSPENDED',subscription_blocked=true,updated_at=now() where organization_id=$1 and status='ACTIVE'",[organizationId]);
       return row;
     });
   });
@@ -175,6 +179,8 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       const out=(await c.query(`update public.station_subscriptions set status='ACTIVE',blocked_at=null,block_reason=null,updated_at=now() where organization_id=$1
         returning id,status,ends_at,grace_days`,[organizationId])).rows[0];
       await c.query('update public.organizations set enabled=true where id=$1',[organizationId]);
+      await c.query("update public.staff_accounts set active=true,subscription_blocked=false where organization_id=$1 and subscription_blocked=true",[organizationId]);
+      await c.query("update public.user_profiles set status='ACTIVE',subscription_blocked=false,updated_at=now() where organization_id=$1 and subscription_blocked=true",[organizationId]);
       return out;
     });
   });
