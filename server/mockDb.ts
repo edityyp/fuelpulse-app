@@ -464,10 +464,14 @@ class MockDatabase {
     if (/select pump_id,fuel_id from app\.pump_fuels/i.test(sql)) {
       return { rows: [...this.pumpFuels], rowCount: this.pumpFuels.length };
     }
-    if (/select f\.price_paise from app\.fuels f join app\.pump_fuels pf.*where f\.id=\$2/i.test(sql)) {
+    if (/select f\.price_paise from app\.pumps p join app\.pump_fuels pf.*where p\.id=\$1 and p\.organization_id=\$3 and p\.active and f\.id=\$2/i.test(sql)) {
+      const pumpId = String(params[0]);
       const fuelId = String(params[1]);
-      const fuel = this.fuels.find((f) => f.id === fuelId);
-      return { rows: fuel ? [{ price_paise: fuel.price_paise }] : [], rowCount: fuel ? 1 : 0 };
+      const organizationId = String(params[2]);
+      const pump = this.pumps.find((p) => p.id === pumpId && p.organization_id === organizationId && p.active);
+      const fuel = this.fuels.find((f) => f.id === fuelId && f.organization_id === organizationId);
+      const linked = this.pumpFuels.some((link) => link.organization_id === organizationId && link.pump_id === pumpId && link.fuel_id === fuelId);
+      return pump && fuel && linked ? { rows: [{ price_paise: fuel.price_paise }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
 
     // Add / Update Pump
@@ -660,13 +664,20 @@ class MockDatabase {
     }
     if (/update app\.users set active=/i.test(sql)) {
       const id = String(params[3]);
-      const u = this.users.find((user) => user.id === id);
+      const organizationId = String(params[4]);
+      const actorRole = String(params[5]);
+      const u = this.users.find((user) => user.id === id && user.organization_id === organizationId && user.role !== "OWNER" && (actorRole === "OWNER" || user.role === "EMPLOYEE"));
       if (u) {
         if (params[0] !== undefined) u.active = Boolean(params[0]);
-        if (params[1]) u.name = String(params[1]);
-        if (params[2]) u.code = String(params[2]);
+        if (params[1] !== undefined) u.name = String(params[1]);
+        if (params[2] !== undefined) u.code = String(params[2]);
       }
       return { rows: u ? [{ id }] : [], rowCount: u ? 1 : 0 };
+    }
+    if (/delete from app\.sessions where user_id=\$1/i.test(sql)) {
+      const id = String(params[0]);
+      this.sessions = this.sessions.filter((session) => session.user_id !== id);
+      return { rows: [], rowCount: 1 };
     }
 
     // Coupons
@@ -688,11 +699,12 @@ class MockDatabase {
       this.coupons.unshift(coupon);
       return { rows: [coupon], rowCount: 1 };
     }
-    if (/update app\.coupons set redeemed_by=\$1,redeemed_at=now\(\) where code=\$2 and plate=\$3/i.test(sql)) {
+    if (/update app\.coupons set redeemed_by=\$1,redeemed_at=now\(\) where organization_id=\$2 and code=\$3 and plate=\$4 and redeemed_at is null and expires_at>now\(\)/i.test(sql)) {
       const redeemed_by = String(params[0]);
-      const code = String(params[1]);
-      const plate = String(params[2]);
-      const c = this.coupons.find((coup) => coup.code === code && coup.plate === plate && !coup.redeemed_at);
+      const organizationId = String(params[1]);
+      const code = String(params[2]);
+      const plate = String(params[3]);
+      const c = this.coupons.find((coup) => coup.organization_id === organizationId && coup.code === code && coup.plate === plate && !coup.redeemed_at && new Date(coup.expires_at) > new Date());
       if (c) {
         c.redeemed_by = redeemed_by;
         c.redeemed_at = new Date().toISOString();
