@@ -98,9 +98,7 @@ export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>, a?: Actor): Pr
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
-    await c.query('SET LOCAL ROLE fuelpulse_gateway');
     if (a) {
-      await c.query('SET LOCAL ROLE fuelpulse_app');
       await c.query("select set_config('app.org',$1,true),set_config('app.actor',$2,true),set_config('app.role',$3,true)", [
         a.organization_id,
         a.id,
