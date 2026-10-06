@@ -7,11 +7,11 @@ import {plate} from "../shared/contracts.js";
 
 export function loyaltyRoutes(app:FastifyInstance){
   app.get("/api/customer/vehicle-summary",async req=>{
-    const q=z.object({plate}).strict().parse(req.query);
+    const q=z.object({plate,station:z.string().regex(/^[a-z0-9-]{3,40}$/)}).strict().parse(req.query);
     const ip=digest(req.ip);
     const result=await tx(async c=>{
       if(!(await limit(c,"vehicle-summary:"+ip,60))) return null;
-      const org=(await c.query(`select id,reward_threshold_points,reward_name,reward_quantity_ml from app.organizations order by created_at asc limit 1`)).rows[0];
+      const org=(await c.query(`select id,reward_threshold_points,reward_name,reward_quantity_ml from app.organizations where slug=$1 limit 1`,[q.station])).rows[0];
       if(!org) fail(404,"Station not configured");
       const points=(await c.query(`select coalesce(sum(points),0)::text total from app.points_ledger where organization_id=$1 and plate=$2`,[org.id,q.plate])).rows[0].total;
       const pumps=(await c.query(`select p.id,p.name,coalesce(sum(t.points),0)::int points,count(t.id)::int transactions,coalesce(sum(t.amount_paise),0)::text amount_paise from app.pumps p left join app.transactions t on t.pump_id=p.id and t.organization_id=$1 and t.plate=$2 where p.organization_id=$1 group by p.id,p.name order by p.name`,[org.id,q.plate])).rows;
