@@ -82,9 +82,9 @@ export async function privateAdminRoutes(app: FastifyInstance) {
     const id = (req.params as { id?: string }).id;
     const body = req.body as { active?: unknown };
     if (!id || typeof body?.active !== 'boolean') fail(400, 'A valid organization ID and active state are required');
-    return tx(async c => (await c.query(
+    return tx(async c => { const row=(await c.query(
       'update public.organizations set enabled=$2 where id=$1 returning id, enabled as active', [id, body.active],
-    )).rows[0] ?? fail(404, 'Organization not found'));
+    )).rows[0]; if(!row) fail(404,'Organization not found'); await c.query('update app.users set active=$2 where organization_id=$1',[id,body.active]); await c.query('update public.staff_accounts set active=$2 where organization_id=$1 and subscription_blocked=false',[id,body.active]); return row; });
   });
 
   app.post('/api/admin/owners', async req => {
@@ -192,6 +192,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       await c.query('update public.organizations set enabled=true where id=$1',[organizationId]);
       await c.query("update public.staff_accounts set active=true,subscription_blocked=false where organization_id=$1 and subscription_blocked=true",[organizationId]);
       await c.query("update public.user_profiles set status='ACTIVE',subscription_blocked=false,updated_at=now() where organization_id=$1 and subscription_blocked=true",[organizationId]);
+      await c.query('update app.users set active=true where organization_id=$1',[organizationId]);
       return out;
     });
   });
