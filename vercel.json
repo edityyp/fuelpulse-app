@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist",
   "headers": [
@@ -19,8 +20,21 @@
     { "source": "/admin", "destination": "/admin-v7.html", "permanent": false },
     { "source": "/admin/", "destination": "/admin-v7.html", "permanent": false }
   ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://fuelpulse-app-production.up.railway.app/api/$1",
+      "transforms": [
+        {
+          "type": "request.headers",
+          "op": "set",
+          "target": { "key": "origin" },
+          "args": "https://fuelpulse-app-production.up.railway.app"
+        }
+      ]
+    }
+  ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/customer", "destination": "/index.html" },
     { "source": "/customer/(.*)", "destination": "/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
