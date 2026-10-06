@@ -27,6 +27,9 @@ async function requireAdmin(req: FastifyRequest) {
 function validCredential(value: string, label: string, min: number, max: number) {
   if (value.length < min || value.length > max) fail(400, `${label} must be ${min}-${max} characters`);
 }
+function normalizeOwnerCode(value: string) {
+  return value.trim().replace(/\\s+/g, '-').toUpperCase();
+}
 function generatedOwnerCode() { return `FP-OWN-${randomBytes(4).toString('hex').toUpperCase()}`; }
 function generatedOwnerPassword() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -90,7 +93,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
     const organizationName = typeof body?.organizationName === 'string' ? body.organizationName.trim() : '';
     const stationId = typeof body?.stationId === 'string' ? body.stationId.trim().toLowerCase() : '';
     const ownerName = typeof body?.ownerName === 'string' ? body.ownerName.trim() : '';
-    const ownerCode = typeof body?.ownerCode === 'string' && body.ownerCode.trim() ? body.ownerCode.trim() : generatedOwnerCode();
+    const ownerCode = typeof body?.ownerCode === 'string' && body.ownerCode.trim() ? normalizeOwnerCode(body.ownerCode) : generatedOwnerCode();
     const ownerPassword = typeof body?.ownerPassword === 'string' && body.ownerPassword ? body.ownerPassword : generatedOwnerPassword();
     const planCode = planOk(body?.planCode) ? body.planCode : 'MONTHLY';
     const pricePaise = typeof body?.pricePaise === 'number' && Number.isInteger(body.pricePaise) && body.pricePaise >= 0 ? body.pricePaise : 0;
@@ -102,7 +105,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
     validCredential(ownerCode, 'Owner code', 6, 24);
     validCredential(ownerPassword, 'Owner password', 12, 128);
     if (!/^[a-z0-9][a-z0-9-]{2,62}$/.test(stationId)) fail(400, 'Station ID may contain lowercase letters, numbers, and hyphens only');
-    if (!/^[A-Za-z0-9-]{6,24}$/.test(ownerCode)) fail(400, 'Owner code may contain letters, numbers, and hyphens only');
+    if (!/^[A-Z0-9-]{6,24}$/.test(ownerCode)) fail(400, 'Owner code may contain letters, numbers, spaces, and hyphens only');
 
     try {
       const result = await tx(async c => {
