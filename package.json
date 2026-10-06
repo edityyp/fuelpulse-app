@@ -9,7 +9,7 @@
     "build": "node scripts/vercel-build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --import tsx --test tests/assist.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
