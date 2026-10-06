@@ -7,7 +7,7 @@ const ADMIN_COOKIE = 'fp_admin_session';
 const SESSION_HOURS = 8;
 
 function adminPasswordConfigured() {
-  return Boolean(process.env.FUELPULSE_ADMIN_PASSWORD && process.env.FUELPULSE_ADMIN_PASSWORD.length >= 16);
+  return Boolean(process.env.FUELPULSE_ADMIN_PASSWORD && process.env.FUELPULSE_ADMIN_PASSWORD.length >= 12);
 }
 
 function passwordMatches(input: string) {
@@ -21,7 +21,7 @@ async function requireAdmin(req: FastifyRequest) {
   const token = req.cookies[ADMIN_COOKIE];
   if (!token) fail(401, 'Admin authentication required');
   await tx(async c => {
-    const row = (await c.query('select 1 from app.admin_sessions where token_hash=$1 and expires_at>now()', [digest(token)])).rows[0];
+    const row = (await c.query('select 1 from public.private_admin_sessions where token_hash=$1 and expires_at>now()', [digest(token)])).rows[0];
     if (!row) fail(401, 'Admin session expired');
   });
 }
@@ -38,7 +38,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
     if (!password || !passwordMatches(password)) fail(401, 'Invalid admin credentials');
 
     const token = randomBytes(32).toString('hex');
-    await tx(c => c.query("insert into app.admin_sessions(token_hash,expires_at) values($1,now()+$2*interval '1 hour')", [digest(token), SESSION_HOURS]));
+    await tx(c => c.query("insert into public.private_admin_sessions(token_hash,expires_at) values($1,now()+$2*interval '1 hour')", [digest(token), SESSION_HOURS]));
     reply.setCookie(ADMIN_COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -56,7 +56,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
 
   app.post('/api/admin/logout', async (req, reply) => {
     const token = req.cookies[ADMIN_COOKIE];
-    if (token) await tx(c => c.query('delete from app.admin_sessions where token_hash=$1', [digest(token)]));
+    if (token) await tx(c => c.query('delete from public.private_admin_sessions where token_hash=$1', [digest(token)]));
     reply.clearCookie(ADMIN_COOKIE, { path: '/' });
     return { ok: true };
   });
