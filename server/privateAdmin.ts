@@ -111,6 +111,12 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       const result = await tx(async c => {
         const created = (await c.query('select public.private_admin_create_owner($1,$2,$3,$4,$5) as result', [organizationName, ownerName, stationId, ownerCode, ownerPassword])).rows[0]?.result;
         if (!created?.station_slug || !created?.owner_code || !created?.organizationId) fail(500, 'Owner provisioning returned incomplete credentials');
+        const ownerRow = (await c.query('select id,password_hash,login_code,full_name,organization_id from public.staff_accounts where id=$1',[created.ownerId ?? null])).rows[0];
+        if (ownerRow) {
+          await c.query('insert into app.organizations(id,slug,name) values($1,$2,$3) on conflict(id) do update set slug=excluded.slug,name=excluded.name',[created.organizationId,created.station_slug,organizationName]);
+          await c.query("insert into app.users(id,organization_id,code,name,role,active) values($1,$2,$3,$4,'OWNER',true) on conflict(id) do update set organization_id=excluded.organization_id,code=excluded.code,name=excluded.name,role='OWNER',active=true",[ownerRow.id,created.organizationId,String(ownerRow.login_code).toUpperCase(),ownerRow.full_name]);
+          await c.query('insert into app.credentials(user_id,password_hash) values($1,$2) on conflict(user_id) do update set password_hash=excluded.password_hash,updated_at=now()',[ownerRow.id,ownerRow.password_hash]);
+        }
         const sub = (await c.query(`insert into public.station_subscriptions(organization_id,plan_code,starts_at,ends_at,grace_days,status,price_paise,payment_status,last_payment_at)
           values($1,$2,now(),now()+case $2 when 'MONTHLY' then interval '1 month' when 'QUARTERLY' then interval '3 months' when 'HALF_YEAR' then interval '6 months' when 'YEARLY' then interval '12 months' end,$3,'ACTIVE',$4,'PAID',now())
           returning id,plan_code,starts_at,ends_at,grace_days,price_paise`, [created.organizationId, planCode, graceDays, pricePaise])).rows[0];
