@@ -17,7 +17,7 @@ const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['vit
 if (result.status !== 0) process.exit(result.status ?? 1);
 
 const admin = await readFile('dist/admin.html', 'utf8');
-const required = ['admin-2026-09-14.1','FuelPulse does not generate passwords','name="ownerCode"','name="ownerPassword"','ownerPasswordConfirm'];
+const required = ['admin-2026-10-06.1','FuelPulse does not generate passwords','name="ownerCode"','name="ownerPassword"','ownerPasswordConfirm'];
 const forbidden = ['Generated automatically','temporaryPassword','temporary_password','Generate owner credentials','name="stationId" id="stationId" placeholder="Generated automatically" readonly'];
 for (const marker of required) if (!admin.includes(marker)) throw new Error(`Admin build verification failed: missing ${marker}`);
 for (const marker of forbidden) if (admin.includes(marker)) throw new Error(`Admin build verification failed: stale content detected (${marker})`);
