@@ -155,6 +155,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       await c.query('update public.organizations set enabled=true where id=$1',[organizationId]);
       await c.query("update public.staff_accounts set active=true,subscription_blocked=false where organization_id=$1 and subscription_blocked=true",[organizationId]);
       await c.query("update public.user_profiles set status='ACTIVE',subscription_blocked=false,updated_at=now() where organization_id=$1 and subscription_blocked=true",[organizationId]);
+      await c.query("update app.users set active=true where organization_id=$1",[organizationId]);
       return sub;
     });
   });
@@ -172,6 +173,7 @@ export async function privateAdminRoutes(app: FastifyInstance) {
       await c.query('update public.organizations set enabled=false where id=$1',[organizationId]);
       await c.query("update public.staff_accounts set active=false,subscription_blocked=true where organization_id=$1 and active",[organizationId]);
       await c.query("update public.user_profiles set status='SUSPENDED',subscription_blocked=true,updated_at=now() where organization_id=$1 and status='ACTIVE'",[organizationId]);
+      await c.query("update app.users set active=false where organization_id=$1",[organizationId]);
       return row;
     });
   });
