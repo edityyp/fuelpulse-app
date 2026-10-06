@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { tx, fail } from './db.js';
-import { digest, hashPassword } from './crypto.js';
+import { digest } from './crypto.js';
 
 const ADMIN_COOKIE = 'fp_admin_session';
 const SESSION_HOURS = 8;
@@ -28,6 +28,16 @@ async function requireAdmin(req: FastifyRequest) {
 
 function validCredential(value: string, label: string, min: number, max: number) {
   if (value.length < min || value.length > max) fail(400, `${label} must be ${min}-${max} characters`);
+}
+
+function generatedOwnerCode() {
+  return `FP-OWN-${randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+function generatedOwnerPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = randomBytes(18);
+  return Array.from(bytes, byte => alphabet[byte % alphabet.length]).join('');
 }
 
 export async function privateAdminRoutes(app: FastifyInstance) {
@@ -63,9 +73,9 @@ export async function privateAdminRoutes(app: FastifyInstance) {
 
   app.get('/api/admin/organizations', async req => {
     await requireAdmin(req);
-    return tx(async c => (await c.query(`select o.id,o.slug,o.name,o.active,o.created_at,
-      (select count(*) from app.users u where u.organization_id=o.id and u.active) as active_users
-      from app.organizations o order by o.created_at desc`)).rows);
+    return tx(async c => (await c.query(`select o.id,o.slug,o.name,o.enabled as active,o.created_at,
+      (select count(*) from public.staff_accounts s where s.organization_id=o.id and s.active) as active_users
+      from public.organizations o order by o.created_at desc`)).rows);
   });
 
   app.patch('/api/admin/organizations/:id/status', async req => {
@@ -73,7 +83,10 @@ export async function privateAdminRoutes(app: FastifyInstance) {
     const id = (req.params as { id?: string }).id;
     const body = req.body as { active?: unknown };
     if (!id || typeof body?.active !== 'boolean') fail(400, 'A valid organization ID and active state are required');
-    return tx(async c => (await c.query('select * from app.admin_set_organization_active($1,$2)', [id, body.active])).rows[0]);
+    return tx(async c => (await c.query(
+      'update public.organizations set enabled=$2 where id=$1 returning id, enabled as active',
+      [id, body.active],
+    )).rows[0] ?? fail(404, 'Organization not found'));
   });
 
   app.post('/api/admin/owners', async req => {
@@ -88,40 +101,27 @@ export async function privateAdminRoutes(app: FastifyInstance) {
     const organizationName = typeof body?.organizationName === 'string' ? body.organizationName.trim() : '';
     const stationId = typeof body?.stationId === 'string' ? body.stationId.trim().toLowerCase() : '';
     const ownerName = typeof body?.ownerName === 'string' ? body.ownerName.trim() : '';
-    const ownerCode = typeof body?.ownerCode === 'string' ? body.ownerCode.trim() : '';
-    const ownerPassword = typeof body?.ownerPassword === 'string' ? body.ownerPassword : '';
+    const ownerCode = typeof body?.ownerCode === 'string' && body.ownerCode.trim() ? body.ownerCode.trim() : generatedOwnerCode();
+    const ownerPassword = typeof body?.ownerPassword === 'string' && body.ownerPassword ? body.ownerPassword : generatedOwnerPassword();
 
-    if (!organizationName || !ownerName || !stationId || !ownerCode || !ownerPassword) {
-      fail(400, 'Business name, Station ID, owner name, owner code, and owner password are required');
+    if (!organizationName || !ownerName || !stationId) {
+      fail(400, 'Business name, Station ID, and owner name are required');
     }
     validCredential(organizationName, 'Business name', 2, 120);
     validCredential(ownerName, 'Owner name', 2, 120);
     validCredential(stationId, 'Station ID', 3, 63);
-    validCredential(ownerCode, 'Owner code', 4, 64);
+    validCredential(ownerCode, 'Owner code', 6, 24);
     validCredential(ownerPassword, 'Owner password', 12, 128);
     if (!/^[a-z0-9][a-z0-9-]{2,62}$/.test(stationId)) fail(400, 'Station ID may contain lowercase letters, numbers, and hyphens only');
-    if (!/^[A-Za-z0-9_-]{4,64}$/.test(ownerCode)) fail(400, 'Owner code may contain letters, numbers, underscores, and hyphens only');
+    if (!/^[A-Za-z0-9-]{6,24}$/.test(ownerCode)) fail(400, 'Owner code may contain letters, numbers, and hyphens only');
 
-    const passwordHash = await hashPassword(ownerPassword);
     try {
       const result = await tx(async c => (await c.query(
-        'select * from app.admin_provision_owner($1,$2,$3,$4,$5)',
-        [organizationName, stationId, ownerName, ownerCode, passwordHash],
-      )).rows[0]);
-      const stationSlug = String(result?.station_slug ?? result?.stationSlug ?? result?.station_id ?? result?.stationId ?? stationId).trim();
-      const returnedOwnerCode = String(result?.owner_code ?? result?.ownerCode ?? result?.code ?? ownerCode).trim();
-      if (!stationSlug || !returnedOwnerCode) fail(500, 'Owner provisioning returned incomplete credentials');
-      return {
-        ...result,
-        station_slug: stationSlug,
-        station_id: stationSlug,
-        stationId: stationSlug,
-        slug: stationSlug,
-        owner_code: returnedOwnerCode,
-        ownerCode: returnedOwnerCode,
-        code: returnedOwnerCode,
-        credentials_saved: true,
-      };
+        'select public.private_admin_create_owner($1,$2,$3,$4,$5) as result',
+        [organizationName, ownerName, stationId, ownerCode, ownerPassword],
+      )).rows[0]?.result);
+      if (!result?.station_slug || !result?.owner_code) fail(500, 'Owner provisioning returned incomplete credentials');
+      return { ...result, credentials_saved: true };
     } catch (error) {
       const code = typeof error === 'object' && error !== null && 'code' in error ? (error as {code?: unknown}).code : undefined;
       if (code === '23505') fail(409, 'Station ID or owner code already exists. Choose unique credentials.');
