@@ -6,24 +6,56 @@
     {
       "source": "/admin",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+        }
       ]
     },
     {
       "source": "/admin-v7.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+        }
       ]
     }
   ],
   "redirects": [
-    { "source": "/admin", "destination": "/admin-v7.html", "permanent": false },
-    { "source": "/admin/", "destination": "/admin-v7.html", "permanent": false }
+    {
+      "source": "/admin",
+      "destination": "/admin-v7.html",
+      "permanent": false
+    },
+    {
+      "source": "/admin/",
+      "destination": "/admin-v7.html",
+      "permanent": false
+    }
   ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/customer", "destination": "/index.html" },
-    { "source": "/customer/(.*)", "destination": "/index.html" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/customer",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/customer/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/subscriptions",
+      "schedule": "30 3 * * *"
+    }
   ]
 }
