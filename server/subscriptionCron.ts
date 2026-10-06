@@ -29,6 +29,7 @@ export function subscriptionCronRoutes(app: FastifyInstance) {
         await c.query('update public.organizations set enabled=false where id=$1',[row.organization_id]);
         await c.query("update public.staff_accounts set active=false,subscription_blocked=true where organization_id=$1 and active",[row.organization_id]);
         await c.query("update public.user_profiles set status='SUSPENDED',subscription_blocked=true,updated_at=now() where organization_id=$1 and status='ACTIVE'",[row.organization_id]);
+        await c.query("update app.users set active=false where organization_id=$1",[row.organization_id]);
       }
 
       const reminderRows = (await c.query(`
